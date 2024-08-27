@@ -1,0 +1,21 @@
+{
+  "SearchCriteria": {
+    "date": null,
+    "indexfrom": 1,
+    "pagesize": 9999
+  },
+  "ResultCount": 1,
+  "Results": [
+    {
+      "No": 1,
+      "Id": 10795,
+      "BrokerCode": "CC",
+      "Date": "2024-08-27T00:00:00",
+      "IDFirm": "JB",
+      "FirmName": "BJB Sekuritas Jawa Barat",
+      "Volume": 3969500,
+      "Value": 5316265900,
+      "Frequency": 269
+    }
+  ]
+}
