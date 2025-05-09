@@ -1,7 +1,5 @@
 import fs from "fs";
 
-import { getBrokerSearch } from "./members-and-participants/exchange-members-profiles/index.js";
-
 export { getTradeSummary } from "./market-data/trading-summary/trading-summary-and-recapitulation/getTradeSummary.js";
 export { getRecapSummary } from "./market-data/trading-summary/trading-summary-and-recapitulation/getRecapSummary.js";
 
@@ -87,18 +85,5 @@ export { getSlbTopActiveStock } from "./market-data/securities-borrowing-and-len
 export { getSlbTopLenderFreq } from "./market-data/securities-borrowing-and-lending/getSlbTopLenderFreq.js";
 export { getSlbTopLenderVal } from "./market-data/securities-borrowing-and-lending/getSlbTopLenderVal.js";
 
-
-
-const data = await getBrokerSearch();
-
-// console.log(data);
-// const jsonData = JSON.stringify(data, null, 2); // `null` and `2` are for pretty-printing
-
-// Write JSON to file
-fs.writeFile('data.json', data, (err) => {
-  if (err) {
-    console.error('Error writing to file', err);
-  } else {
-    console.log('Data successfully written to file');
-  }
-});
+export * from './listed-companies/companyProfiles.js';
+export * from './members-and-participants/memberProfiles.js';
