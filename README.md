@@ -1,5 +1,7 @@
 # idx-bei
 
+![neo4j-network-analysis](neo4j-network-analysis.png)
+
 ## Overview
 **idx-bei** is a Node.js application designed to facilitate the easy download of data from the Indonesia Stock Exchange (IDX) / Bursa Efek Indonesia (BEI). This tool allows users to list available API endpoints from the IDX website and export the retrieved data in either JSON or CSV formats.
 
@@ -29,7 +31,27 @@ The primary purpose of this tool is educational. It provides a straightforward w
 
 ## Usage
 
-- TODO
+To use the IDX/BEI data downloader, you can run the example scripts provided in the `examples` directory. These scripts demonstrate how to fetch and save different types of data from the IDX website.
+
+### Fetching Company Profiles
+
+This example fetches a list of all companies and then iterates through them to get detailed profile information for each. The data is saved incrementally to `data/companyDetailsByKodeEmiten.json`.
+
+To run this example:
+```bash
+node examples/company-profiles.js
+```
+
+### Fetching Broker Search Data
+
+This example fetches broker search data and saves it to `data/brokerSearch.json`.
+
+To run this example:
+```bash
+node examples/broker-search.js
+```
+
+You can modify these examples or create your own scripts to download the specific data you need by importing and using the functions from the various modules in the project.
 
 ## Notes
 - **Educational Use Only**: This tool is intended for educational purposes. Please review IDX's Terms of Service and Conditions for any restrictions on data usage.
