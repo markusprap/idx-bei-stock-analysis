@@ -1,6 +1,9 @@
 import os
 import glob
 import json
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env
 import pandas as pd
 from sqlalchemy import create_engine, text
 import psycopg2
@@ -20,11 +23,11 @@ logger = logging.getLogger()
 
 # PostgreSQL Configuration
 PG_CONFIG = {
-    'host': 'localhost',
-    'port': 5432,
-    'database': 'postgres',
-    'user': 'postgres',
-    'password': 'postgres'  # Replace with your actual password
+    'host': os.getenv('POSTGRES_HOST', 'localhost'),
+    'port': int(os.getenv('POSTGRES_PORT', 5432)),
+    'database': os.getenv('POSTGRES_DB', 'postgres'),
+    'user': os.getenv('POSTGRES_USER', 'postgres'),
+    'password': os.getenv('POSTGRES_PASSWORD', 'postgres')
 }
 
 # Database and table name

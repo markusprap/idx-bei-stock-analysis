@@ -1,18 +1,22 @@
 import pandas as pd
 import numpy as np
 import psycopg2
+import os
 from sqlalchemy import create_engine
 import json
+from dotenv import load_dotenv
+
+load_dotenv()  # Load environment variables from .env
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 
 # Database connection config
 DB_PARAMS = {
-    "dbname": "postgres",
-    "user": "postgres",
-    "password": "postgres",
-    "host": "localhost",
-    "port": "5432"
+    "dbname": os.getenv("POSTGRES_DB", "postgres"),
+    "user": os.getenv("POSTGRES_USER", "postgres"),
+    "password": os.getenv("POSTGRES_PASSWORD", "postgres"),
+    "host": os.getenv("POSTGRES_HOST", "localhost"),
+    "port": os.getenv("POSTGRES_PORT", "5432")
 }
 DB_URL = f"postgresql://{DB_PARAMS['user']}:{DB_PARAMS['password']}@{DB_PARAMS['host']}:{DB_PARAMS['port']}/{DB_PARAMS['dbname']}"
 ENGINE = create_engine(DB_URL)
