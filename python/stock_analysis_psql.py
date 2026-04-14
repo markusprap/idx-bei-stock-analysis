@@ -1,14 +1,9 @@
-import pandas as pd
-import numpy as np
-import psycopg2
 import os
+import pandas as pd
 from sqlalchemy import create_engine
-import json
 from dotenv import load_dotenv
 
 load_dotenv()  # Load environment variables from .env
-import matplotlib.pyplot as plt
-import matplotlib.ticker as mtick
 
 # Database connection config
 DB_PARAMS = {
