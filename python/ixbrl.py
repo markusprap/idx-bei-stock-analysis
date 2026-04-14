@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
-import xml.etree.ElementTree as ET
 import os
+import json
 
 output_dir = "output"
 os.makedirs(output_dir, exist_ok=True)
@@ -38,7 +38,6 @@ for filename in os.listdir("inlineXBRL"):
         #     print(r)
 
         # Write to JSON
-        import json
 
         # Sanitize title for filename
         sanitized_title = "".join([c for c in title if c.isalnum() or c in (' ', '.', '_')]).strip()
