@@ -61,8 +61,7 @@ def get_indonesia_stocks_data(engine=ENGINE):
                           'profit_period', 'profit_attr_owner', 'eps', 'book_value', 
                           'per', 'price_bv', 'de_ratio', 'roa', 'roe', 'npm']
         
-        for col in numeric_columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+        df[numeric_columns] = df[numeric_columns].apply(pd.to_numeric, errors='coerce')
 
         # Buffett-style filtering (ROE >= 15%, Debt-to-Equity < 1, positive PER and PBV)
         df = df[
