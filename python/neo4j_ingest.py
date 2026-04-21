@@ -94,79 +94,125 @@ def ingest_stock_profiles(tx, stock):
     )
 
     # Directors
-    for d in stock.get("Direktur", []):
+    directors = [
+        {
+            "name": clean_indonesian_name(d.get("Nama", "")),
+            "jabatan": d.get("Jabatan"),
+            "afiliasi": d.get("Afiliasi", False)
+        }
+        for d in stock.get("Direktur", [])
+    ]
+    if directors:
         tx.run("""
-            MERGE (d:Insider {name: $name})
-            WITH d
             MATCH (c:Company {kode: $kode})
-            MERGE (d)-[:DIRECTOR_OF {jabatan: $jabatan, afiliasi: $afiliasi}]->(c)
-        """, name=clean_indonesian_name(d.get("Nama", "")), jabatan=d.get("Jabatan"), afiliasi=d.get("Afiliasi", False), kode=kode)
+            WITH c
+            UNWIND $directors AS d
+            MERGE (di:Insider {name: d.name})
+            MERGE (di)-[:DIRECTOR_OF {jabatan: d.jabatan, afiliasi: d.afiliasi}]->(c)
+        """, directors=directors, kode=kode)
 
     # Commissioners
-    for k in stock.get("Komisaris", []):
+    commissioners = [
+        {
+            "name": clean_indonesian_name(k.get("Nama", "")),
+            "jabatan": k.get("Jabatan"),
+            "independen": k.get("Independen", False)
+        }
+        for k in stock.get("Komisaris", [])
+    ]
+    if commissioners:
         tx.run("""
-            MERGE (k:Insider {name: $name})
-            WITH k
             MATCH (c:Company {kode: $kode})
-            MERGE (k)-[:COMMISSIONER_OF {jabatan: $jabatan, independen: $independen}]->(c)
-        """, name=clean_indonesian_name(k.get("Nama", "")), jabatan=k.get("Jabatan"), independen=k.get("Independen", False), kode=kode)
+            WITH c
+            UNWIND $commissioners AS k
+            MERGE (ki:Insider {name: k.name})
+            MERGE (ki)-[:COMMISSIONER_OF {jabatan: k.jabatan, independen: k.independen}]->(c)
+        """, commissioners=commissioners, kode=kode)
 
     # Corporate Secretary
-    for s in stock.get("Sekretaris", []):
+    secretaries = [
+        {
+            "name": clean_indonesian_name(s.get("Nama", "")),
+            "phone": s.get("Telepon"),
+            "email": s.get("Email"),
+            "fax": s.get("Fax")
+        }
+        for s in stock.get("Sekretaris", [])
+    ]
+    if secretaries:
         tx.run("""
-            MERGE (sec:Insider {name: $name})
-            WITH sec
             MATCH (c:Company {kode: $kode})
+            WITH c
+            UNWIND $secretaries AS s
+            MERGE (sec:Insider {name: s.name})
             MERGE (sec)-[:CORPORATE_SECRETARY_OF {
-                phone: $phone, email: $email, fax: $fax
+                phone: s.phone, email: s.email, fax: s.fax
             }]->(c)
-        """, name=clean_indonesian_name(s.get("Nama", "")), 
-             phone=s.get("Telepon"),
-             email=s.get("Email"),
-             fax=s.get("Fax"),
-             kode=kode
-        )
+        """, secretaries=secretaries, kode=kode)
 
     # Audit Committee
-    for a in stock.get("KomiteAudit", []):
+    audit_committee = [
+        {
+            "name": clean_indonesian_name(a.get("Nama", "")),
+            "jabatan": a.get("Jabatan")
+        }
+        for a in stock.get("KomiteAudit", [])
+    ]
+    if audit_committee:
         tx.run("""
-            MERGE (ac:Insider {name: $name})
-            WITH ac
             MATCH (c:Company {kode: $kode})
-            MERGE (ac)-[:AUDIT_COMMITTEE_MEMBER_OF {jabatan: $jabatan}]->(c)
-        """, name=clean_indonesian_name(a.get("Nama", "")), 
-             jabatan=a.get("Jabatan"),
-             kode=kode
-        )
+            WITH c
+            UNWIND $audit_committee AS a
+            MERGE (ac:Insider {name: a.name})
+            MERGE (ac)-[:AUDIT_COMMITTEE_MEMBER_OF {jabatan: a.jabatan}]->(c)
+        """, audit_committee=audit_committee, kode=kode)
 
     # Shareholders
-    for s in stock.get("PemegangSaham", []):
+    shareholders = [
+        {
+            "name": clean_indonesian_name(s.get("Nama", "")),
+            "jumlah": s.get("Jumlah"),
+            "kategori": s.get("Kategori"),
+            "pengendali": s.get("Pengendali"),
+            "persentase": s.get("Persentase")
+        }
+        for s in stock.get("PemegangSaham", [])
+    ]
+    if shareholders:
         tx.run("""
-            MERGE (s:Insider {name: $name})
-            WITH s
             MATCH (c:Company {kode: $kode})
-            MERGE (s)-[:OWNS {jumlah: $jumlah, kategori: $kategori, pengendali: $pengendali, persentase: $persentase}]->(c)
-        """,
-            jumlah=s.get("Jumlah"),  
-            kategori=s.get("Kategori"),
-            name=clean_indonesian_name(s.get("Nama", "")), 
-            pengendali=s.get("Pengendali"),
-            persentase=s.get("Persentase"),  
-            kode=kode
-        )
+            WITH c
+            UNWIND $shareholders AS s
+            MERGE (sh:Insider {name: s.name})
+            MERGE (sh)-[:OWNS {jumlah: s.jumlah, kategori: s.kategori, pengendali: s.pengendali, persentase: s.persentase}]->(c)
+        """, shareholders=shareholders, kode=kode)
+
     # Subsidiaries (AnakPerusahaan)
-    for a in stock.get("AnakPerusahaan", []):
+    subsidiaries = [
+        {
+            "name": a.get("Nama", ""),
+            "bidang_usaha": a.get("BidangUsaha"),
+            "lokasi": a.get("Lokasi"),
+            "jumlah_aset": a.get("JumlahAset"),
+            "satuan": a.get("Satuan"),
+            "status_operasi": a.get("StatusOperasi"),
+            "tahun_komersil": a.get("TahunKomersil"),
+            "mata_uang": a.get("MataUang"),
+            "persentase": a.get("Persentase")
+        }
+        for a in stock.get("AnakPerusahaan", [])
+    ]
+    if subsidiaries:
         tx.run("""
-            MERGE (s:Subsidiary {name: $name})
-            SET s.bidangUsaha = $bidang_usaha, s.lokasi = $lokasi, s.jumlahAset = $jumlah_aset,
-                s.satuan = $satuan, s.statusOperasi = $status_operasi, s.tahunKomersil = $tahun_komersil,
-                s.mataUang = $mata_uang
-            WITH s
             MATCH (c:Company {kode: $kode})
-            MERGE (s)-[:SUBSIDIARY_OF {persentase: $persentase}]->(c)
-        """, name=a.get("Nama", ""), bidang_usaha=a.get("BidangUsaha"), lokasi=a.get("Lokasi"), jumlah_aset=a.get("JumlahAset"),
-            satuan=a.get("Satuan"), status_operasi=a.get("StatusOperasi"), tahun_komersil=a.get("TahunKomersil"),
-            mata_uang=a.get("MataUang"), persentase=a.get("Persentase"), kode=kode)
+            WITH c
+            UNWIND $subsidiaries AS sub
+            MERGE (s:Subsidiary {name: sub.name})
+            SET s.bidangUsaha = sub.bidang_usaha, s.lokasi = sub.lokasi, s.jumlahAset = sub.jumlah_aset,
+                s.satuan = sub.satuan, s.statusOperasi = sub.status_operasi, s.tahunKomersil = sub.tahun_komersil,
+                s.mataUang = sub.mata_uang
+            MERGE (s)-[:SUBSIDIARY_OF {persentase: sub.persentase}]->(c)
+        """, subsidiaries=subsidiaries, kode=kode)
 
 
 def ingest_all_stock_profiles(data_path="../data/companyDetailsByKodeEmiten.json"):
