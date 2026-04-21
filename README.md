@@ -49,7 +49,7 @@ docker compose up -d
 Neo4j will be available at:
 - Web UI: http://localhost:7474
 - Bolt: bolt://localhost:7687
-- Default Login: `neo4j` / `password`
+- Note: Credentials must be set in your `.env` file (see `.env.example`).
 
 ### 4. Running Scrapers
 The `python/` directory contains various scripts for data collection:
