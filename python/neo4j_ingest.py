@@ -1,4 +1,3 @@
-import pandas as pd
 import json
 import re
 import os
@@ -47,176 +46,98 @@ def delete_all_data():
     print("All data deleted.")
 
 
-def ingest_stock_profiles(tx, stock):
-    """Ingests a single stock's profile, directors, commissioners, etc. to Neo4j."""
-    # Ensure all list lookups are safe
-    try:
-        profile = stock['Profiles'][0]
-    except IndexError:
-        print(f"Skipping stock due to missing profile data: {stock}")
-        return
-        
-    kode = profile["KodeEmiten"]
+def ingest_stock_profiles(tx, batch):
+    """Ingests a batch of stock profiles, directors, commissioners, etc. to Neo4j."""
 
-    # Create/Update Company node with enriched data
+    # 1. Create/Update Company nodes
     tx.run("""
-        MERGE (c:Company {kode: $kode})
-        SET c.name = $kode,
-            c.companyName = $name,
-            c.industry = $industry,
-            c.subIndustry = $sub_industry,
-            c.sector = $sector,
-            c.subSector = $sub_sector,
-            c.website = $website,
-            c.email = $email,
-            c.phone = $telepon,
-            c.fax = $fax,
-            c.address = $alamat,
-            c.npwp = $npwp,
-            c.listingBoard = $papan,
-            c.listingDate = date($tanggal_pencatatan),
-            c.businessActivity = $kegiatan_usaha
-    """, kode=kode,
-         name=profile.get("NamaEmiten"),
-         industry=profile.get("Industri"),
-         sub_industry=profile.get("SubIndustri"),
-         sector=profile.get("Sektor"),
-         sub_sector=profile.get("SubSektor"),
-         website=profile.get("Website"),
-         email=profile.get("Email"),
-         telepon=profile.get("Telepon"),
-         fax=profile.get("Fax"),
-         alamat=profile.get("Alamat"),
-         npwp=profile.get("NPWP"),
-         papan=profile.get("PapanPencatatan"),
-         tanggal_pencatatan=profile.get("TanggalPencatatan", "")[:10],
-         kegiatan_usaha=profile.get("KegiatanUsahaUtama")
-    )
+        UNWIND $batch AS stock
+        MERGE (c:Company {kode: stock.kode})
+        SET c.name = stock.kode,
+            c.companyName = stock.name,
+            c.industry = stock.industry,
+            c.subIndustry = stock.sub_industry,
+            c.sector = stock.sector,
+            c.subSector = stock.sub_sector,
+            c.website = stock.website,
+            c.email = stock.email,
+            c.phone = stock.telepon,
+            c.fax = stock.fax,
+            c.address = stock.alamat,
+            c.npwp = stock.npwp,
+            c.listingBoard = stock.papan,
+            c.listingDate = CASE WHEN stock.tanggal_pencatatan <> '' THEN date(stock.tanggal_pencatatan) ELSE null END,
+            c.businessActivity = stock.kegiatan_usaha
+    """, batch=batch)
 
-    # Directors
-    directors = [
-        {
-            "name": clean_indonesian_name(d.get("Nama", "")),
-            "jabatan": d.get("Jabatan"),
-            "afiliasi": d.get("Afiliasi", False)
-        }
-        for d in stock.get("Direktur", [])
-    ]
-    if directors:
-        tx.run("""
-            MATCH (c:Company {kode: $kode})
-            WITH c
-            UNWIND $directors AS d
-            MERGE (di:Insider {name: d.name})
-            MERGE (di)-[:DIRECTOR_OF {jabatan: d.jabatan, afiliasi: d.afiliasi}]->(c)
-        """, directors=directors, kode=kode)
+    # 2. Directors
+    tx.run("""
+        UNWIND $batch AS stock
+        MATCH (c:Company {kode: stock.kode})
+        WITH c, stock.directors AS directors
+        UNWIND directors AS d
+        MERGE (di:Insider {name: d.name})
+        MERGE (di)-[:DIRECTOR_OF {jabatan: d.jabatan, afiliasi: d.afiliasi}]->(c)
+    """, batch=batch)
 
-    # Commissioners
-    commissioners = [
-        {
-            "name": clean_indonesian_name(k.get("Nama", "")),
-            "jabatan": k.get("Jabatan"),
-            "independen": k.get("Independen", False)
-        }
-        for k in stock.get("Komisaris", [])
-    ]
-    if commissioners:
-        tx.run("""
-            MATCH (c:Company {kode: $kode})
-            WITH c
-            UNWIND $commissioners AS k
-            MERGE (ki:Insider {name: k.name})
-            MERGE (ki)-[:COMMISSIONER_OF {jabatan: k.jabatan, independen: k.independen}]->(c)
-        """, commissioners=commissioners, kode=kode)
+    # 3. Commissioners
+    tx.run("""
+        UNWIND $batch AS stock
+        MATCH (c:Company {kode: stock.kode})
+        WITH c, stock.commissioners AS commissioners
+        UNWIND commissioners AS k
+        MERGE (ki:Insider {name: k.name})
+        MERGE (ki)-[:COMMISSIONER_OF {jabatan: k.jabatan, independen: k.independen}]->(c)
+    """, batch=batch)
 
-    # Corporate Secretary
-    secretaries = [
-        {
-            "name": clean_indonesian_name(s.get("Nama", "")),
-            "phone": s.get("Telepon"),
-            "email": s.get("Email"),
-            "fax": s.get("Fax")
-        }
-        for s in stock.get("Sekretaris", [])
-    ]
-    if secretaries:
-        tx.run("""
-            MATCH (c:Company {kode: $kode})
-            WITH c
-            UNWIND $secretaries AS s
-            MERGE (sec:Insider {name: s.name})
-            MERGE (sec)-[:CORPORATE_SECRETARY_OF {
-                phone: s.phone, email: s.email, fax: s.fax
-            }]->(c)
-        """, secretaries=secretaries, kode=kode)
+    # 4. Corporate Secretary
+    tx.run("""
+        UNWIND $batch AS stock
+        MATCH (c:Company {kode: stock.kode})
+        WITH c, stock.secretaries AS secretaries
+        UNWIND secretaries AS s
+        MERGE (sec:Insider {name: s.name})
+        MERGE (sec)-[:CORPORATE_SECRETARY_OF {
+            phone: s.phone, email: s.email, fax: s.fax
+        }]->(c)
+    """, batch=batch)
 
-    # Audit Committee
-    audit_committee = [
-        {
-            "name": clean_indonesian_name(a.get("Nama", "")),
-            "jabatan": a.get("Jabatan")
-        }
-        for a in stock.get("KomiteAudit", [])
-    ]
-    if audit_committee:
-        tx.run("""
-            MATCH (c:Company {kode: $kode})
-            WITH c
-            UNWIND $audit_committee AS a
-            MERGE (ac:Insider {name: a.name})
-            MERGE (ac)-[:AUDIT_COMMITTEE_MEMBER_OF {jabatan: a.jabatan}]->(c)
-        """, audit_committee=audit_committee, kode=kode)
+    # 5. Audit Committee
+    tx.run("""
+        UNWIND $batch AS stock
+        MATCH (c:Company {kode: stock.kode})
+        WITH c, stock.audit_committee AS audit_committee
+        UNWIND audit_committee AS a
+        MERGE (ac:Insider {name: a.name})
+        MERGE (ac)-[:AUDIT_COMMITTEE_MEMBER_OF {jabatan: a.jabatan}]->(c)
+    """, batch=batch)
 
-    # Shareholders
-    shareholders = [
-        {
-            "name": clean_indonesian_name(s.get("Nama", "")),
-            "jumlah": s.get("Jumlah"),
-            "kategori": s.get("Kategori"),
-            "pengendali": s.get("Pengendali"),
-            "persentase": s.get("Persentase")
-        }
-        for s in stock.get("PemegangSaham", [])
-    ]
-    if shareholders:
-        tx.run("""
-            MATCH (c:Company {kode: $kode})
-            WITH c
-            UNWIND $shareholders AS s
-            MERGE (sh:Insider {name: s.name})
-            MERGE (sh)-[:OWNS {jumlah: s.jumlah, kategori: s.kategori, pengendali: s.pengendali, persentase: s.persentase}]->(c)
-        """, shareholders=shareholders, kode=kode)
+    # 6. Shareholders
+    tx.run("""
+        UNWIND $batch AS stock
+        MATCH (c:Company {kode: stock.kode})
+        WITH c, stock.shareholders AS shareholders
+        UNWIND shareholders AS s
+        MERGE (sh:Insider {name: s.name})
+        MERGE (sh)-[:OWNS {jumlah: s.jumlah, kategori: s.kategori, pengendali: s.pengendali, persentase: s.persentase}]->(c)
+    """, batch=batch)
 
-    # Subsidiaries (AnakPerusahaan)
-    subsidiaries = [
-        {
-            "name": a.get("Nama", ""),
-            "bidang_usaha": a.get("BidangUsaha"),
-            "lokasi": a.get("Lokasi"),
-            "jumlah_aset": a.get("JumlahAset"),
-            "satuan": a.get("Satuan"),
-            "status_operasi": a.get("StatusOperasi"),
-            "tahun_komersil": a.get("TahunKomersil"),
-            "mata_uang": a.get("MataUang"),
-            "persentase": a.get("Persentase")
-        }
-        for a in stock.get("AnakPerusahaan", [])
-    ]
-    if subsidiaries:
-        tx.run("""
-            MATCH (c:Company {kode: $kode})
-            WITH c
-            UNWIND $subsidiaries AS sub
-            MERGE (s:Subsidiary {name: sub.name})
-            SET s.bidangUsaha = sub.bidang_usaha, s.lokasi = sub.lokasi, s.jumlahAset = sub.jumlah_aset,
-                s.satuan = sub.satuan, s.statusOperasi = sub.status_operasi, s.tahunKomersil = sub.tahun_komersil,
-                s.mataUang = sub.mata_uang
-            MERGE (s)-[:SUBSIDIARY_OF {persentase: sub.persentase}]->(c)
-        """, subsidiaries=subsidiaries, kode=kode)
+    # 7. Subsidiaries (AnakPerusahaan)
+    tx.run("""
+        UNWIND $batch AS stock
+        MATCH (c:Company {kode: stock.kode})
+        WITH c, stock.subsidiaries AS subsidiaries
+        UNWIND subsidiaries AS sub
+        MERGE (s:Subsidiary {name: sub.name})
+        SET s.bidangUsaha = sub.bidang_usaha, s.lokasi = sub.lokasi, s.jumlahAset = sub.jumlah_aset,
+            s.satuan = sub.satuan, s.statusOperasi = sub.status_operasi, s.tahunKomersil = sub.tahun_komersil,
+            s.mataUang = sub.mata_uang
+        MERGE (s)-[:SUBSIDIARY_OF {persentase: sub.persentase}]->(c)
+    """, batch=batch)
 
 
-def ingest_all_stock_profiles(data_path="../data/companyDetailsByKodeEmiten.json"):
-    """Loads stock profiles from JSON and ingests them into Neo4j."""
+def ingest_all_stock_profiles(data_path="../data/companyDetailsByKodeEmiten.json", batch_size=500):
+    """Loads stock profiles from JSON and ingests them into Neo4j using batching."""
     try:
         with open(data_path, "r", encoding="utf-8") as f:
             stocks_profile = json.load(f)
@@ -224,10 +145,97 @@ def ingest_all_stock_profiles(data_path="../data/companyDetailsByKodeEmiten.json
         print(f"Error: Data file not found at {data_path}")
         return
 
+    # Prepare data for batching
+    prepared_data = []
+    for ticker, stock_data in stocks_profile.items():
+        try:
+            profile = stock_data['Profiles'][0]
+        except IndexError:
+            print(f"Skipping stock due to missing profile data: {ticker}")
+            continue
+
+        kode = profile["KodeEmiten"]
+
+        prepared_stock = {
+            "kode": kode,
+            "name": profile.get("NamaEmiten"),
+            "industry": profile.get("Industri"),
+            "sub_industry": profile.get("SubIndustri"),
+            "sector": profile.get("Sektor"),
+            "sub_sector": profile.get("SubSektor"),
+            "website": profile.get("Website"),
+            "email": profile.get("Email"),
+            "telepon": profile.get("Telepon"),
+            "fax": profile.get("Fax"),
+            "alamat": profile.get("Alamat"),
+            "npwp": profile.get("NPWP"),
+            "papan": profile.get("PapanPencatatan"),
+            "tanggal_pencatatan": profile.get("TanggalPencatatan", "")[:10],
+            "kegiatan_usaha": profile.get("KegiatanUsahaUtama"),
+            "directors": [
+                {
+                    "name": clean_indonesian_name(d.get("Nama", "")),
+                    "jabatan": d.get("Jabatan"),
+                    "afiliasi": d.get("Afiliasi", False)
+                }
+                for d in stock_data.get("Direktur", [])
+            ],
+            "commissioners": [
+                {
+                    "name": clean_indonesian_name(k.get("Nama", "")),
+                    "jabatan": k.get("Jabatan"),
+                    "independen": k.get("Independen", False)
+                }
+                for k in stock_data.get("Komisaris", [])
+            ],
+            "secretaries": [
+                {
+                    "name": clean_indonesian_name(s.get("Nama", "")),
+                    "phone": s.get("Telepon"),
+                    "email": s.get("Email"),
+                    "fax": s.get("Fax")
+                }
+                for s in stock_data.get("Sekretaris", [])
+            ],
+            "audit_committee": [
+                {
+                    "name": clean_indonesian_name(a.get("Nama", "")),
+                    "jabatan": a.get("Jabatan")
+                }
+                for a in stock_data.get("KomiteAudit", [])
+            ],
+            "shareholders": [
+                {
+                    "name": clean_indonesian_name(s.get("Nama", "")),
+                    "jumlah": s.get("Jumlah"),
+                    "kategori": s.get("Kategori"),
+                    "pengendali": s.get("Pengendali"),
+                    "persentase": s.get("Persentase")
+                }
+                for s in stock_data.get("PemegangSaham", [])
+            ],
+            "subsidiaries": [
+                {
+                    "name": a.get("Nama", ""),
+                    "bidang_usaha": a.get("BidangUsaha"),
+                    "lokasi": a.get("Lokasi"),
+                    "jumlah_aset": a.get("JumlahAset"),
+                    "satuan": a.get("Satuan"),
+                    "status_operasi": a.get("StatusOperasi"),
+                    "tahun_komersil": a.get("TahunKomersil"),
+                    "mata_uang": a.get("MataUang"),
+                    "persentase": a.get("Persentase")
+                }
+                for a in stock_data.get("AnakPerusahaan", [])
+            ]
+        }
+        prepared_data.append(prepared_stock)
+
     driver = GraphDatabase.driver(NEO4J_URI, auth=(NEO4J_USER, NEO4J_PASSWORD))
     with driver.session() as session:
-        for ticker, stock_data in stocks_profile.items():
-            session.execute_write(ingest_stock_profiles, stock_data) 
+        for i in range(0, len(prepared_data), batch_size):
+            batch = prepared_data[i:i + batch_size]
+            session.execute_write(ingest_stock_profiles, batch)
 
     print("Stock profile ingestion complete.")
     driver.close()
