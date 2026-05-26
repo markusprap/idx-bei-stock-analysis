@@ -1,8 +1,10 @@
 import yfinance as yf
 import pandas as pd
 import time
+import concurrent.futures
 from tqdm import tqdm
 import os
+import threading
 
 def get_idx_tickers():
     """
@@ -16,8 +18,34 @@ def get_idx_tickers():
     ]
     return idx_tickers
 
+class RateLimiter:
+    def __init__(self, calls, period):
+        self.calls = calls
+        self.period = period
+        self.timestamps = []
+        self.lock = threading.Lock()
+
+    def wait(self):
+        with self.lock:
+            now = time.time()
+            # Remove timestamps older than the period
+            self.timestamps = [t for t in self.timestamps if now - t < self.period]
+            if len(self.timestamps) >= self.calls:
+                # Need to wait until the oldest call expires
+                sleep_time = self.period - (now - self.timestamps[0])
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                # Update timestamps after sleeping
+                now = time.time()
+                self.timestamps = [t for t in self.timestamps if now - t < self.period]
+            self.timestamps.append(now)
+
+# Create rate limiter: e.g., 5 calls per second max to avoid being overly aggressive
+rate_limiter = RateLimiter(calls=5, period=1.0)
+
 def get_financial_ratios(ticker):
     """Get key financial ratios for a given yfinance ticker."""
+    rate_limiter.wait()
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -70,14 +98,24 @@ def fetch_and_save_financial_ratios(output_file="indonesia_stock_financial_ratio
     idx_tickers = get_idx_tickers()
     print(f"Found {len(idx_tickers)} Indonesian stocks to analyze (yfinance)")
     
-    all_ratios = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        # We need to maintain order of inputs. Use submit, keep futures in dict
+        future_to_ticker = {executor.submit(get_financial_ratios, ticker): ticker for ticker in idx_tickers}
+        # to process in order and update tqdm nicely, we can't easily wait as_completed AND keep exact list order trivially without sorting results later.
+        # But wait, we just want to save it ordered? We can create a list and fill it at correct indices.
+        results_map = {}
+        for future in tqdm(concurrent.futures.as_completed(future_to_ticker), total=len(idx_tickers), desc="Fetching financial ratios"):
+            ticker = future_to_ticker[future]
+            try:
+                ratios = future.result()
+                results_map[ticker] = ratios
+            except Exception as e:
+                results_map[ticker] = {'Symbol': ticker, 'Error': str(e)}
+
+    # Restore order
+    results = [results_map[ticker] for ticker in idx_tickers]
     
-    for ticker in tqdm(idx_tickers, desc="Fetching financial ratios"):
-        ratios = get_financial_ratios(ticker)
-        all_ratios.append(ratios)
-        time.sleep(0.5) # Add a small delay
-    
-    df = pd.DataFrame(all_ratios)
+    df = pd.DataFrame(results)
     df.to_csv(output_file, index=False)
     print(f"Financial ratios saved to {output_file}")
     
@@ -85,6 +123,7 @@ def fetch_and_save_financial_ratios(output_file="indonesia_stock_financial_ratio
 
 def get_stock_holders(ticker):
     """Get major, institutional, and mutual fund holders for a given ticker."""
+    rate_limiter.wait()
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -126,6 +165,7 @@ def get_stock_holders(ticker):
 
 def get_stock_insiders(ticker):
     """Get insider trading data and roster for a given ticker."""
+    rate_limiter.wait()
     try:
         stock = yf.Ticker(ticker)
         info = stock.info
@@ -231,6 +271,11 @@ def save_insiders_data(insiders_data, output_dir="."):
         insider_roster_df.to_csv(os.path.join(output_dir, "indonesia_insider_roster.csv"), index=False)
         print(f"Insider roster data saved to {os.path.join(output_dir, 'indonesia_insider_roster.csv')}")
 
+def _fetch_holder_insider(ticker):
+    holder_info = get_stock_holders(ticker)
+    insider_info = get_stock_insiders(ticker)
+    return holder_info, insider_info
+
 def main_holders_insiders():
     """Main function to fetch and save holders and insiders data."""
     idx_tickers = get_idx_tickers()
@@ -238,14 +283,25 @@ def main_holders_insiders():
     holders_data = []
     insiders_data = []
     
-    for ticker in tqdm(idx_tickers, desc="Fetching holders and insiders data"):
-        holder_info = get_stock_holders(ticker)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_ticker = {executor.submit(_fetch_holder_insider, ticker): ticker for ticker in idx_tickers}
+        
+        results_map = {}
+        for future in tqdm(concurrent.futures.as_completed(future_to_ticker), total=len(idx_tickers), desc="Fetching holders and insiders data"):
+            ticker = future_to_ticker[future]
+            try:
+                holder_info, insider_info = future.result()
+                results_map[ticker] = (holder_info, insider_info)
+            except Exception as e:
+                # Fallback on errors
+                holder_info = {'symbol': ticker, 'error': str(e)}
+                insider_info = {'symbol': ticker, 'error': str(e)}
+                results_map[ticker] = (holder_info, insider_info)
+        
+    for ticker in idx_tickers:
+        holder_info, insider_info = results_map[ticker]
         holders_data.append(holder_info)
-        
-        insider_info = get_stock_insiders(ticker)
         insiders_data.append(insider_info)
-        
-        time.sleep(1)
     
     save_holders_data(holders_data)
     save_insiders_data(insiders_data)
