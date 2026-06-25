@@ -31,5 +31,10 @@ export default tseslint.config(
       globals: { ...globals.node, Bun: "readonly" },
     },
   },
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+    },
+  },
   eslintConfigPrettier,
 );

@@ -1,0 +1,38 @@
+import { pgTable, text, doublePrecision } from "drizzle-orm/pg-core";
+
+export const financialRatios = pgTable("financial_ratios", {
+  sector: text("sector"),
+  subSector: text("sub_sector"),
+  industry: text("industry"),
+  subIndustry: text("sub_industry"),
+  sectorCode: text("sector_code"),
+  subSectorCode: text("sub_sector_code"),
+  industryCode: text("industry_code"),
+  subIndustryCode: text("sub_industry_code"),
+  subName: text("sub_name"),
+  subCode: text("sub_code"),
+  code: text("code"),
+  stockName: text("stock_name"),
+  sharia: text("sharia"),
+  fsDate: text("fs_date"),
+  fiscalYearEnd: text("fiscal_year_end"),
+  assets: doublePrecision("assets"),
+  liabilities: doublePrecision("liabilities"),
+  equity: doublePrecision("equity"),
+  sales: doublePrecision("sales"),
+  ebt: doublePrecision("ebt"),
+  profitPeriod: doublePrecision("profit_period"),
+  profitAttrOwner: doublePrecision("profit_attr_owner"),
+  eps: doublePrecision("eps"),
+  audit: text("audit"),
+  opini: text("opini"),
+  bookValue: doublePrecision("book_value"),
+  per: doublePrecision("per"),
+  priceBv: doublePrecision("price_bv"),
+  deRatio: doublePrecision("de_ratio"),
+  roa: doublePrecision("roa"),
+  roe: doublePrecision("roe"),
+  npm: doublePrecision("npm"),
+});
+
+export type FinancialRatioRow = typeof financialRatios.$inferSelect;
