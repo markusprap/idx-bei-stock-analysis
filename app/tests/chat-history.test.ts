@@ -145,4 +145,28 @@ describe("GET /api/threads/:id/messages", () => {
     expect(res.status).toBe(200);
     expect(body.messages).toEqual([]);
   });
+
+  test("returns an empty array (not a 500) for a malformed, non-UUID thread id", async () => {
+    const route = createChatRoute({ db, llm: fakeLlm("unused") });
+
+    const res = await route.request("/api/threads/not-a-uuid/messages");
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.messages).toEqual([]);
+  });
+});
+
+describe("POST /api/chat — malformed threadId", () => {
+  test("rejects a non-UUID threadId with 400 instead of crashing", async () => {
+    const route = createChatRoute({ db, llm: fakeLlm("unused") });
+
+    const res = await route.request("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Halo", threadId: "not-a-uuid" }),
+    });
+
+    expect(res.status).toBe(400);
+  });
 });

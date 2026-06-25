@@ -5,7 +5,7 @@ import { financialRatios, type FinancialRatioRow } from "../db/schema";
 import type { llm as LlmClient } from "../llm/client";
 import { CHAT_MODEL } from "../llm/client";
 import { containsGoldenRuleViolation, buildSafeFallbackReply } from "../golden-rule/guard";
-import { createThread, appendMessage, listThreads, listMessages } from "./chat-history";
+import { createThread, appendMessage, listThreads, listMessages, isValidThreadId } from "./chat-history";
 
 const TICKER_PATTERN = /\b[A-Z]{4}\b/;
 const PRICE_OR_TECHNICAL_PATTERN =
@@ -112,6 +112,10 @@ export function createChatRoute(deps: ChatDeps) {
       return c.json({ error: "message is required" }, 400);
     }
 
+    if (body.threadId && !isValidThreadId(body.threadId)) {
+      return c.json({ error: "threadId is not a valid id" }, 400);
+    }
+
     const threadId = body.threadId ?? (await createThread(deps.db, message)).id;
 
     await appendMessage(deps.db, threadId, "user", message);
@@ -127,7 +131,12 @@ export function createChatRoute(deps: ChatDeps) {
   });
 
   route.get("/api/threads/:id/messages", async (c) => {
-    const messages = await listMessages(deps.db, c.req.param("id"));
+    const id = c.req.param("id");
+    if (!isValidThreadId(id)) {
+      return c.json({ messages: [] });
+    }
+
+    const messages = await listMessages(deps.db, id);
     return c.json({ messages });
   });
 

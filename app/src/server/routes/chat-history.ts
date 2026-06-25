@@ -3,6 +3,11 @@ import type { db as DbClient } from "../db/client";
 import { chatThreads, chatMessages, type ChatThreadRow } from "../db/chat-schema";
 
 const THREAD_TITLE_MAX_LENGTH = 50;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidThreadId(value: string): boolean {
+  return UUID_PATTERN.test(value);
+}
 
 function deriveTitle(firstMessage: string): string {
   const trimmed = firstMessage.trim();
