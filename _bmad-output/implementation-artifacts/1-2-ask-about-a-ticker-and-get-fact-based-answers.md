@@ -4,7 +4,7 @@ baseline_commit: f36b47c521b19f62bdf67431866c62ff9a127325
 
 # Story 1.2: Ask About a Ticker and Get Fact-Based Answers
 
-Status: ready-for-review
+Status: done
 
 ## Story
 
@@ -139,9 +139,32 @@ claude-sonnet-4-6
 - `docs/decisions/ADR-007-llm-model-t0-gpt-5-mini-not-claude.md` (new)
 - `docs/decisions/ADR-005-llm-provider-sumopod-t0.md` (resolved open item)
 - `docs/qa/golden-rule-test-cases.md` (added case 8, renumbered 9-10)
+- `.github/workflows/app-ci.yml` (CI fix — added Postgres service container + env vars, see Change Log)
+- `app/tests/fixtures/seed-financial-ratios.sql` (new — CI seed fixture, real BBCA row)
+- `docs/decisions/ADR-005-llm-provider-sumopod-t0.md` (fixed stale Consequences note that contradicted ADR-007)
 
 Not committed (gitignored, local-only): `app/.env` (`DATABASE_URL`, `SUMOPOD_API_KEY`, `SUMOPOD_BASE_URL`).
 
 ### Change Log
 
 - 2026-06-25: Story 1.2 implemented — Drizzle/Postgres connection, Sumopod LLM client, `POST /api/chat` endpoint, `ChatView` wired live. All tasks complete, all tests passing (12 pass). Two architecture findings resolved with the team mid-implementation (ADR-006 prep already merged; ADR-007 new — model swap from Claude to `gpt-5-mini` on Sumopod). One new Golden Rule test case logged for Story 1.3.
+- 2026-06-25: CI failed on first PR run — `chat.test.ts`'s real-Postgres integration test (AC1) throws at module-load when `DATABASE_URL`/`SUMOPOD_API_KEY` are unset, which CI had neither. Fixed by adding a `postgres:16-alpine` service container to `.github/workflows/app-ci.yml` plus a seed step using a new fixture (`app/tests/fixtures/seed-financial-ratios.sql`, real BBCA row). Verified locally against a clean Postgres container before pushing; CI green after. Also fixed ADR-005, which still claimed `claude-sonnet-4-6` worked on Sumopod — now points to ADR-007 as the authoritative state.
+- 2026-06-25: Senior Developer Review follow-ups logged (see below) — both deferred to Story 1.3 / Story 1.4, neither blocking this story.
+
+## Senior Developer Review (AI)
+
+**Reviewers:** John (PM), Sally (UX), Winston (Architect), Murat (Test Architect) — roundtable review, not a single-agent pass.
+**Date:** 2026-06-25
+**Outcome:** Approved, with 2 non-blocking follow-ups carried forward to later stories
+
+### Findings
+
+1. **[Med][Murat]** Golden-rule case 8 (unsolicited offer to escalate to a buy/hold/sell verdict, discovered live during this story's manual testing) is a different severity class from cases 1-7 in `docs/qa/golden-rule-test-cases.md`: cases 1-7 mostly require the user to bait or pressure the model first, case 8 is unprompted — the model volunteers it. Risk: if Story 1.3's enforcement testing only verifies "declines when asked," case 8's failure mode (offers without being asked) could pass un-tested by being lumped in with the others.
+2. **[Low][Sally]** `ChatView`'s message list is plain `<p>` elements in React state only — no timestamps, no visual distinction for resumed context, and the whole conversation is lost on refresh. Correctly out of scope for this story (Story 1.4 owns persistence), but the UX cost of "ask a real question, lose it on refresh" should be an explicit dev note in Story 1.4, not rediscovered there.
+
+### Action Items
+
+- [ ] [AI-Review][Med] When Story 1.3 builds Golden Rule enforcement tests, give golden-rule case 8 its own explicit test assertion — don't let it pass implicitly as a variant of cases 1-7 (Murat, #1). Tracked for Story 1.3 (MAR-117).
+- [ ] [AI-Review][Low] Add an explicit dev note to Story 1.4 (history persistence) calling out that losing the in-progress conversation on refresh is a real UX regression for a learning product, not just a missing feature (Sally, #2). Tracked for Story 1.4 (MAR-118).
+
+The team also reviewed the newly-added `.claude/agents/qa-validator.md` subagent: agreed it's a useful mechanical pre-PR gate (AC/tests/CI-green checks) but explicitly not a substitute for this kind of roundtable review, which surfaces severity judgments (like Finding #1 above) a static checklist wouldn't catch.
