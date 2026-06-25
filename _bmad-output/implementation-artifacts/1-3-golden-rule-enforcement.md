@@ -4,7 +4,7 @@ baseline_commit: c784c30afb0215438eb1ec44d68fe4af50825ff8
 
 # Story 1.3: Golden Rule Enforcement in Chat Responses
 
-Status: review
+Status: done
 
 ## Story
 
