@@ -23,6 +23,8 @@ data/news/
 
 # --- Project Specific ---
 .claude/
+.agent/
+_bmad/
 .deprecated/
 CLAUDE.md
 
