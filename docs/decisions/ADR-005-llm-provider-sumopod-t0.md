@@ -23,5 +23,5 @@ For T0, Sahamigo's LLM calls go through Sumopod instead of OpenRouter. This is e
 ## Consequences
 
 - Story 1.2 (MAR-116) implementation targets Sumopod's API for T0.
-- Open item: exact model availability/naming and pricing on Sumopod for Claude Sonnet 4.6 (or nearest equivalent) needs confirming during Story 1.2 implementation — not yet verified.
+- **Resolved 2026-06-25:** model availability confirmed — Sumopod exposes `claude-sonnet-4-6` directly (matches ADR-001's default model exactly, no "nearest equivalent" substitution needed) at base URL `https://ai.sumopod.com/v1`, OpenAI-compatible. Verified via `/v1/models` and a real `/v1/chat/completions` call before Story 1.2 implementation began. Pricing not separately investigated — out of scope while spending existing credit per this ADR's REASON.
 - Before T1 (more users, sustained cost), revisit whether to stay on Sumopod or move to OpenRouter per ADR-001's original intent — tracked as a new open item, not assumed either way.
