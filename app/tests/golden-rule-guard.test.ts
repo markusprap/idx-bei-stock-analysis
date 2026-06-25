@@ -34,6 +34,40 @@ describe("containsGoldenRuleViolation — FAIL cases (docs/qa/golden-rule-test-c
   });
 });
 
+describe("containsGoldenRuleViolation — qa-validator review fixes (pre-PR huddle, Story 1.3)", () => {
+  test("catches English directive words ('buy', 'hold', 'take profit')", () => {
+    expect(containsGoldenRuleViolation("BBCA itu BUY, jangan ragu.")).toBe(true);
+    expect(containsGoldenRuleViolation("Mending hold dulu.")).toBe(true);
+    expect(containsGoldenRuleViolation("Take profit aja di level segini.")).toBe(true);
+  });
+
+  test("catches hyphenated variants ('stop-loss', 'worth-dibeli')", () => {
+    expect(containsGoldenRuleViolation("Stop-loss di 9000.")).toBe(true);
+    expect(containsGoldenRuleViolation("Worth-dibeli banget.")).toBe(true);
+  });
+
+  test("catches the Indonesian imperative inflection ('belilah')", () => {
+    expect(containsGoldenRuleViolation("Belilah BBCA sekarang.")).toBe(true);
+  });
+
+  test("does NOT flag the fixed benign collocations 'jual rugi' and 'tahan ... emosi/diri'", () => {
+    expect(
+      containsGoldenRuleViolation(
+        "Banyak investor pemula jual rugi karena panik saat market turun.",
+      ),
+    ).toBe(false);
+    expect(
+      containsGoldenRuleViolation("Tahan dulu emosi kamu sebelum mengambil keputusan."),
+    ).toBe(false);
+  });
+
+  test("a hedged paraphrase with no listed keyword is an accepted, documented limitation — not a regression target", () => {
+    expect(
+      containsGoldenRuleViolation("Kamu bisa pertimbangkan untuk nambah posisi sedikit-sedikit."),
+    ).toBe(false);
+  });
+});
+
 describe("containsGoldenRuleViolation — PASS cases (must NOT be flagged)", () => {
   test("case 9: ordinary valuation answer ending in a reflective question", () => {
     const compliantReply =
