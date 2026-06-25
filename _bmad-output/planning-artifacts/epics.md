@@ -1,5 +1,5 @@
 ---
-stepsCompleted: ["step-01-validate-prerequisites", "step-02-design-epics", "step-03-create-stories (Epic 1 only, per ALAN)"]
+stepsCompleted: ["step-01-validate-prerequisites", "step-02-design-epics", "step-03-create-stories (Epic 1, Epic 2, per ALAN)"]
 inputDocuments:
   - _bmad-output/planning-artifacts/prds/prd-idx-bei-stock-analysis-2026-06-25/prd.md
   - CLAUDE.md
@@ -7,6 +7,7 @@ inputDocuments:
   - docs/decisions/ADR-002-ux-conventions-shell-disclosure-iconography.md
   - docs/decisions/ADR-003-data-granularity-eod-only.md
   - docs/decisions/ADR-004-golden-rule-enforcement-mechanism.md
+  - docs/decisions/ADR-008-market-discovery-data-sources.md
   - docs/design-references/sahamigo-design-reference.md
 ---
 
@@ -120,7 +121,7 @@ Free/Pro tiers enforced — monthly (not daily) chat quota gates Chat, Watchlist
 Validates the single-VPS architecture's untested assumption (Postgres + Neo4j + app on Hetzner CX32, 8GB) before deep infra commitment. Per ALAN, must resolve into an ADR update, not just a findings doc.
 **Linear:** MAR-114
 
-Per ALAN Layer 4: only Epic 1 is broken into detailed stories now (this sprint). Epics 2-4 stay at epic-level detail and get story breakdowns when their own sprint is about to start.
+Per ALAN Layer 4: Epic 1 and Epic 2 are broken into detailed stories (Epic 1 shipped; Epic 2's sprint is starting now, following its SPIKE MAR-119/ADR-008 resolution). Epics 3-4 stay at epic-level detail and get story breakdowns when their own sprint is about to start.
 
 ## Epic 1: Chat — AI Tutor Core Loop
 
@@ -202,7 +203,165 @@ So that separate research sessions about different stocks don't get mixed togeth
 
 Covers: FR-4. Only story in this epic that needs new DB entities (chat threads/messages).
 
-## Epic 2: Market Discovery & Stock Detail (MAR-111)
+## Epic 2: Market Discovery & Stock Detail
+
+User can browse IHSG/trending/sector performance/news, open a stock's detail (chart + annual fundamentals/valuation/profitability), and jump into Chat with that ticker's context already loaded. Builds on Epic 1 but Epic 1 does not require this to function.
+
+### Story 2.1: IHSG Summary — MAR-120
+
+As a user,
+I want to see the current IHSG index level and a chart,
+So that I get a sense of overall market direction before diving into individual stocks.
+
+**Acceptance Criteria:**
+
+**Given** I open the Search/IHSG view
+**When** the page loads
+**Then** I see IHSG's most recent EOD level and a chart of its recent trend
+
+**Given** IHSG data comes from the new `index_summary` table
+**When** it's displayed
+**Then** it's visibly labeled EOD (not live)
+
+**Given** the ETL writes a new row
+**When** ingested
+**Then** the row has a `scraped_at` timestamp reflecting actual ingestion time, not a source-side date field
+
+Covers: FR-6, FR-11. New app-owned table `index_summary` (Drizzle-migrated), ETL'd from `scrape_index_summary.py`'s existing JSON output — per ADR-008 Decision 1. No new scraper needed.
+
+### Story 2.2: Search Stocks by Ticker or Name — MAR-121
+
+As a user,
+I want to search for a stock by its ticker or company name,
+So that I can quickly find the stock I want to look into.
+
+**Acceptance Criteria:**
+
+**Given** I type a valid ticker or partial company name into search
+**When** I submit
+**Then** I see matching results from Sahamigo's own data store
+
+**Given** my search matches no stock
+**When** results are shown
+**Then** I see a clear empty state, not an error
+
+Covers: FR-7. No new table — queries `financial_ratios.code`/`stock_name` (already populated by Epic 1), per ADR-008 Decision 2. App-layer work only.
+
+### Story 2.3: Trending Stocks and Top Movers — MAR-122
+
+As a user,
+I want to see which stocks are trending or moved the most today,
+So that I can discover stocks worth looking into beyond ones I already know.
+
+**Acceptance Criteria:**
+
+**Given** I open the Search/IHSG view
+**When** the page loads
+**Then** I see top gainer/loser/value/volume lists sourced from EOD trade data
+
+**Given** the list is dense
+**When** displayed
+**Then** it shows a curated top-N with a "Selengkapnya" expansion link (UX-DR2), not full density by default
+
+**Given** the ETL writes `daily_trade_summary` rows
+**When** ingested
+**Then** each row has a `scraped_at` timestamp
+
+Covers: FR-8. New app-owned table `daily_trade_summary`, ETL'd from `companySummaryByKodeEmiten.json`'s already-scraped OHLCV/change data — per ADR-008 Decision 3. No new scraper needed; the data collection gap was "never ETL'd to Postgres," not "never collected."
+
+### Story 2.4: Sector Performance Breakdown — MAR-123
+
+As a user,
+I want to see how different sectors performed,
+So that I can understand which parts of the market are moving and explore from a sector lens.
+
+**Acceptance Criteria:**
+
+**Given** I open the Search/IHSG view
+**When** the page loads
+**Then** I see a performance breakdown grouped by sector
+
+**Given** `GetIndexSummary`'s actual response shape was left unconfirmed at SPIKE time (ADR-008)
+**When** this story starts
+**Then** the first implementation step confirms whether `index_summary` (Story 2.1) already contains sectoral indices
+
+**Given** `index_summary` does contain sectoral data
+**When** sector performance is shown
+**Then** it's served directly from `index_summary` — no new table
+
+**Given** `index_summary` does NOT contain sectoral data
+**When** sector performance is computed instead
+**Then** it's aggregated from `daily_trade_summary` (Story 2.3) grouped by `financial_ratios.sector`/`sub_sector`
+
+Covers: FR-9. Depends on Story 2.1 and/or 2.3 (their tables) per ADR-008 Decision 4 — do not start before at least one of those is done.
+
+### Story 2.5: Market News — MAR-124
+
+As a user,
+I want to see relevant market news,
+So that I have context for why a stock or the market might be moving.
+
+**Acceptance Criteria:**
+
+**Given** I open the Search/IHSG view
+**When** the page loads
+**Then** I see a curated list of recent market news items
+
+**Given** the list is dense
+**When** displayed
+**Then** it follows the same progressive-disclosure pattern (UX-DR2) as the rest of the page
+
+**Given** the ETL writes `market_news` rows
+**When** ingested
+**Then** each row has a `scraped_at` timestamp
+
+Covers: FR-10. New app-owned table `market_news`, ETL'd from `scrape_idx_news.py`'s existing JSON output — per ADR-008 Decision 5. No new scraper needed.
+
+### Story 2.6: Stock Detail Page — MAR-125
+
+As a user,
+I want to open a stock's detail page and see its price chart and fundamentals,
+So that I can study one stock in depth before deciding what to ask the AI.
+
+**Acceptance Criteria:**
+
+**Given** I open a stock's detail page
+**When** it loads
+**Then** I see a price chart with multiple selectable timeframes, sourced from `daily_trade_summary` (Story 2.3)
+
+**Given** I view the fundamental/valuation/profitability tables
+**When** displayed
+**Then** they show annual granularity only, explicitly labeled "(Tahunan)" — never presented as quarterly (FR-13, ADR-003)
+
+**Given** the data store has no row for this ticker
+**When** the page loads
+**Then** it says so explicitly rather than showing blank/broken tables
+
+Covers: FR-12, FR-13. Depends on Story 2.3 (`daily_trade_summary`) for the chart; uses Epic 1's existing `financial_ratios` for fundamentals — no new table of its own.
+
+### Story 2.7: "Tanya AI soal saham ini" CTA and Chat Context Handoff — MAR-126
+
+As a user,
+I want to jump straight into chat about a stock I'm viewing, with its context already loaded,
+So that I don't have to retype the ticker or lose my train of thought.
+
+**Acceptance Criteria:**
+
+**Given** I'm on a stock's detail page
+**When** I click "Tanya AI soal saham ini" (pill CTA, chat-bubble icon, no buy/transact action anywhere near it)
+**Then** I'm taken to Chat with that ticker's context already applied
+
+**Given** the chat thread was entered via this handoff
+**When** the thread renders
+**Then** a visible ticker chip/pill appears at the top — context is never applied invisibly (UX-DR7)
+
+**Given** this CTA replaces what would be a buy/transact button in a typical trading app
+**When** the page is reviewed against the Golden Rule
+**Then** no buy/sell/transact affordance exists anywhere on Stock Detail
+
+Covers: FR-14, FR-5. Depends on Story 2.6 (Stock Detail must exist) and Epic 1 (Chat). Closes Epic 2's integration loop back into Epic 1 — last story in the epic.
+
+## Epic 3: Watchlist (MAR-112)
 Story breakdown deferred until this epic's sprint is about to start (per ALAN).
 
 ## Epic 3: Watchlist (MAR-112)
