@@ -6,10 +6,11 @@ import {
   handleChatMessage,
 } from "../src/server/routes/chat";
 import { db } from "../src/server/db/client";
-import { financialRatios } from "../src/server/db/schema";
+import { financialRatios, type FinancialRatioRow } from "../src/server/db/schema";
 import { eq } from "drizzle-orm";
 import type { llm as LlmClient } from "../src/server/llm/client";
 import type { db as DbClient } from "../src/server/db/client";
+import { buildSafeFallbackReply } from "../src/server/golden-rule/guard";
 
 function fakeLlm(reply: string) {
   const create = mock(async (_params: { messages: { content: string }[] }) => ({
@@ -104,5 +105,24 @@ describe("handleChatMessage — AC 1 (BBCA happy path, real Postgres)", () => {
 
     const rows = await db.select().from(financialRatios).where(eq(financialRatios.code, "BBCA"));
     expect(rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe("handleChatMessage — Golden Rule guard wired into both LLM call sites (Story 1.3)", () => {
+  test("replaces a violating reply with the safe fallback on the chitchat (no-ticker) path", async () => {
+    const { llm } = fakeLlm("Beli aja BBCA, lagi murah.");
+
+    const reply = await handleChatMessage("Halo, kamu siapa?", { db: dbReturning([]), llm });
+
+    expect(reply).toBe(buildSafeFallbackReply(null));
+  });
+
+  test("replaces a violating reply with the safe fallback on the ticker-found (data) path", async () => {
+    const row = { code: "BBCA", per: 22.38, priceBv: 4.66, roe: 20.8206 } as FinancialRatioRow;
+    const { llm } = fakeLlm("Beli aja BBCA, lagi murah.");
+
+    const reply = await handleChatMessage("Gimana valuasi BBCA?", { db: dbReturning([row]), llm });
+
+    expect(reply).toBe(buildSafeFallbackReply(row));
   });
 });
