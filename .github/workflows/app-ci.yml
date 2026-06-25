@@ -18,6 +18,24 @@ jobs:
     defaults:
       run:
         working-directory: app
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+      SUMOPOD_API_KEY: ci-placeholder-key
+      SUMOPOD_BASE_URL: https://ai.sumopod.com/v1
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +44,9 @@ jobs:
           bun-version: "1.3.13"
 
       - run: bun install --frozen-lockfile
+
+      - name: Seed financial_ratios fixture
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f tests/fixtures/seed-financial-ratios.sql
 
       - run: bun run lint
 
