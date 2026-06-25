@@ -4,7 +4,7 @@ baseline_commit: 9462e8cd74155c0b16bf0519491bc6fab97e3390
 
 # Story 1.1: Default Chat View on Launch
 
-Status: ready-for-review
+Status: done
 
 ## Story
 
