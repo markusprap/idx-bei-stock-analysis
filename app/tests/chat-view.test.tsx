@@ -2,8 +2,27 @@ import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { indexRoute } from "../src/web/router";
+import { createMemoryHistory, createRouter, RouterProvider } from "@tanstack/react-router";
+import { indexRoute, routeTree } from "../src/web/router";
 import { ChatRoute } from "../src/web/routes/chat";
+import { db } from "../src/server/db/client";
+import { chatThreads, chatMessages } from "../src/server/db/chat-schema";
+import { createThread, appendMessage } from "../src/server/routes/chat-history";
+
+async function renderAtPath(path: string): Promise<string> {
+  const queryClient = new QueryClient();
+  const testRouter = createRouter({
+    routeTree,
+    history: createMemoryHistory({ initialEntries: [path] }),
+  });
+  await testRouter.load();
+
+  return renderToStaticMarkup(
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={testRouter} />
+    </QueryClientProvider>,
+  );
+}
 
 describe("default route", () => {
   test("index route ('/') is wired to the Chat view, not Search/Watchlist", () => {
@@ -11,16 +30,28 @@ describe("default route", () => {
     expect(indexRoute.options.component).toBe(ChatRoute);
   });
 
-  test("Chat view renders its empty-state copy", () => {
-    const queryClient = new QueryClient();
-    const html = renderToStaticMarkup(
-      <QueryClientProvider client={queryClient}>
-        <ChatRoute />
-      </QueryClientProvider>,
-    );
+  test("Chat view renders its empty-state copy when no thread is active", async () => {
+    const html = await renderAtPath("/");
 
     expect(html).toContain("Mau tanya soal saham apa hari ini?");
     expect(html).toContain("Sahamigo menyajikan data, bukan rekomendasi");
+  });
+});
+
+describe("AC 3 — index opens to a new/empty Chat even with real persisted history (Story 1.1 review follow-up, Murat)", () => {
+  test("seeded chat history in Postgres is not auto-resumed at '/'", async () => {
+    await db.delete(chatMessages);
+    await db.delete(chatThreads);
+
+    const thread = await createThread(db, "Riwayat lama soal BBCA");
+    await appendMessage(db, thread.id, "user", "Gimana valuasi BBCA?");
+    await appendMessage(db, thread.id, "assistant", "PER-nya 22.38, menurut kamu gimana?");
+
+    const html = await renderAtPath("/");
+
+    expect(html).toContain("Mau tanya soal saham apa hari ini?");
+    expect(html).not.toContain("Riwayat lama soal BBCA");
+    expect(html).not.toContain("PER-nya 22.38");
   });
 });
 

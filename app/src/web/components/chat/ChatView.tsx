@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { ChatBubbleIcon } from "../icons";
 import "./ChatView.css";
 
@@ -8,29 +9,60 @@ type ChatMessage = {
   content: string;
 };
 
-async function sendChatMessage(message: string): Promise<string> {
+async function sendChatMessage(
+  message: string,
+  threadId: string | null,
+): Promise<{ threadId: string; reply: string }> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, threadId: threadId ?? undefined }),
   });
 
   if (!res.ok) {
     throw new Error(`Chat request failed: ${res.status}`);
   }
 
-  const data: { reply: string } = await res.json();
-  return data.reply;
+  return res.json();
 }
 
-export function ChatView() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+async function fetchThreadMessages(threadId: string): Promise<ChatMessage[]> {
+  const res = await fetch(`/api/threads/${threadId}/messages`);
+
+  if (!res.ok) {
+    throw new Error(`Failed to load thread messages: ${res.status}`);
+  }
+
+  const data: { messages: { role: string; content: string }[] } = await res.json();
+  return data.messages.map((m) => ({ role: m.role as ChatMessage["role"], content: m.content }));
+}
+
+type ChatViewProps = {
+  threadId: string | null;
+};
+
+export function ChatView({ threadId }: ChatViewProps) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [input, setInput] = useState("");
 
+  const threadMessagesQuery = useQuery({
+    queryKey: ["thread-messages", threadId],
+    queryFn: () => fetchThreadMessages(threadId as string),
+    enabled: threadId !== null,
+  });
+
+  const messages = threadId !== null ? threadMessagesQuery.data ?? [] : [];
+
   const mutation = useMutation({
-    mutationFn: sendChatMessage,
-    onSuccess: (reply) => {
-      setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+    mutationFn: (message: string) => sendChatMessage(message, threadId),
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: ["thread-messages", data.threadId] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+
+      if (threadId === null) {
+        navigate({ to: "/chat/$threadId", params: { threadId: data.threadId } });
+      }
     },
   });
 
@@ -41,14 +73,15 @@ export function ChatView() {
       return;
     }
 
-    setMessages((prev) => [...prev, { role: "user", content: message }]);
     setInput("");
     mutation.mutate(message);
   }
 
+  const showMessages = messages.length > 0 || mutation.isPending;
+
   return (
     <section className="chat-view">
-      {messages.length === 0 ? (
+      {!showMessages ? (
         <div className="chat-view-empty">
           <ChatBubbleIcon />
           <h1>Mau tanya soal saham apa hari ini?</h1>
@@ -64,9 +97,12 @@ export function ChatView() {
             </p>
           ))}
           {mutation.isPending && (
-            <p className="chat-view-message chat-view-message--assistant chat-view-message--pending">
-              Sahamigo sedang mengetik...
-            </p>
+            <>
+              <p className="chat-view-message chat-view-message--user">{mutation.variables}</p>
+              <p className="chat-view-message chat-view-message--assistant chat-view-message--pending">
+                Sahamigo sedang mengetik...
+              </p>
+            </>
           )}
         </div>
       )}
