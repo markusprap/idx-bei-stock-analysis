@@ -4,7 +4,7 @@ baseline_commit: ab729dd55b5aa6d59dfeddc1dcae89547f0c8abf
 
 # Story 1.4: Start a New Chat and Browse History
 
-Status: review
+Status: done
 
 ## Story
 
