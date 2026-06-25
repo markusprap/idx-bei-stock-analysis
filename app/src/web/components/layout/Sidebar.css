@@ -84,6 +84,36 @@
   padding: 0 0.2rem;
 }
 
+.sidebar-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sidebar-history-item {
+  width: 100%;
+  display: block;
+  border: none;
+  background: transparent;
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  text-align: left;
+  padding: 0.4rem 0.2rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-history-item:hover {
+  background: var(--color-accent-3);
+}
+
 .sidebar-footer {
   display: flex;
   align-items: center;

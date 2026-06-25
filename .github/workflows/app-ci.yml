@@ -48,6 +48,9 @@ jobs:
       - name: Seed financial_ratios fixture
         run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f tests/fixtures/seed-financial-ratios.sql
 
+      - name: Apply chat_threads/chat_messages migration
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0000_careful_husk.sql
+
       - run: bun run lint
 
       - run: bun run typecheck

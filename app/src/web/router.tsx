@@ -9,7 +9,13 @@ export const indexRoute = createRoute({
   component: ChatRoute,
 });
 
-const routeTree = rootRoute.addChildren([indexRoute]);
+export const chatThreadRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/chat/$threadId",
+  component: ChatRoute,
+});
+
+export const routeTree = rootRoute.addChildren([indexRoute, chatThreadRoute]);
 
 export const router = createRouter({ routeTree });
 
