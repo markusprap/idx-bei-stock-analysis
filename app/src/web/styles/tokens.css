@@ -1,0 +1,32 @@
+:root {
+  --color-canvas: #fbf7f0;
+  --color-text: #2b2620;
+
+  --color-accent-1: #2f5d4f;
+  --color-accent-2: #3e7a5c;
+  --color-accent-3: #9fc2ae;
+  --color-accent-4: #eaf2ec;
+
+  --font-heading: "Fraunces", serif;
+  --font-body: "Inter", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-text);
+  font-family: var(--font-body);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+}
