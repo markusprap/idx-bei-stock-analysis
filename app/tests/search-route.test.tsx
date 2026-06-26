@@ -48,7 +48,7 @@ async function renderSearch(mockResponse = MOCK_IHSG_RESPONSE): Promise<string> 
 
 describe("/search route", () => {
   test("route is wired to SearchRoute component", () => {
-    expect(searchRoute.path).toBe("search");
+    expect(searchRoute.fullPath).toBe("/search");
     expect(searchRoute.options.component).toBe(SearchRoute);
   });
 
