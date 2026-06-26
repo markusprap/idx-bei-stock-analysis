@@ -31,10 +31,16 @@ const MOCK_SECTORS_RESPONSE = {
   staleness: null,
 };
 
+const MOCK_NEWS_RESPONSE = {
+  news: [],
+  staleness: null,
+};
+
 async function renderSearch(
   mockIhsg: unknown = MOCK_IHSG_RESPONSE,
   mockTrending: unknown = { tradeDate: null, gainers: [], losers: [], topValue: [], topVolume: [], staleness: null },
   mockSectors: unknown = MOCK_SECTORS_RESPONSE,
+  mockNews: unknown = MOCK_NEWS_RESPONSE,
 ): Promise<string> {
   global.fetch = mock(async (url: RequestInfo | URL) => {
     const urlStr = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
@@ -43,6 +49,9 @@ async function renderSearch(
     }
     if (urlStr.includes("/sectors")) {
       return new Response(JSON.stringify(mockSectors), { status: 200 });
+    }
+    if (urlStr.includes("/news")) {
+      return new Response(JSON.stringify(mockNews), { status: 200 });
     }
     return new Response(JSON.stringify(mockIhsg), { status: 200 });
   }) as unknown as typeof fetch;
@@ -103,5 +112,11 @@ describe("/search route", () => {
     const html = await renderSearch();
     expect(html).toContain("sector-performance");
     expect(html).toContain("Performa Sektor");
+  });
+
+  test("renders MarketNews section on the search page", async () => {
+    const html = await renderSearch();
+    expect(html).toContain("market-news");
+    expect(html).toContain("Berita Pasar");
   });
 });

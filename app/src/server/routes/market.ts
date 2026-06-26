@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { desc, asc, eq, isNotNull, and, or, ilike, inArray, sql } from "drizzle-orm";
 import type { db as DbClient } from "../db/client";
-import { indexSummary, dailyTradeSummary } from "../db/market-schema";
+import { indexSummary, dailyTradeSummary, marketNews } from "../db/market-schema";
 import { financialRatios } from "../db/schema";
 
 const SEARCH_LIMIT = 20;
@@ -163,6 +163,26 @@ export function createMarketRoute(deps: { db: typeof DbClient }) {
     const staleness = scrapedAtRow[0] ? computeStaleness(scrapedAtRow[0].scrapedAt) : null;
 
     return c.json({ tradeDate: latestDate, sectors, staleness });
+  });
+
+  app.get("/news", async (c) => {
+    const rows = await deps.db
+      .select()
+      .from(marketNews)
+      .orderBy(desc(marketNews.publishedDate))
+      .limit(20);
+
+    if (rows.length === 0) {
+      return c.json({ news: [], staleness: null });
+    }
+
+    const latestRow = rows[0];
+    if (!latestRow) return c.json({ news: [], staleness: null });
+
+    return c.json({
+      news: rows,
+      staleness: computeStaleness(latestRow.scrapedAt),
+    });
   });
 
   app.get("/search", async (c) => {

@@ -1,0 +1,109 @@
+---
+baseline_commit: 47e72114c6b0521804c65b74742e48a16b385bc0
+---
+
+# Story 2.5: Market News
+
+Status: review
+
+## Story
+
+As a user, I want to see relevant market news, so that I have context for why a stock or the market might be moving.
+
+## Acceptance Criteria
+
+1. Given I open the Search/IHSG view, When the page loads, Then I see a curated list of recent market news items.
+2. Given the list is dense, When displayed, Then it follows the same progressive-disclosure pattern (UX-DR2) as the rest of the page.
+3. Given the ETL writes `market_news` rows, When ingested, Then each row has a `scraped_at` timestamp.
+
+(Source: Linear MAR-124, ADR-008 Decision 5)
+
+## Tasks / Subtasks
+
+- [x] Task 1: DB Schema + Migration
+  - [x] Add `marketNews` table to `app/src/server/db/market-schema.ts`: `newsId` (integer PK), `publishedDate` (timestamp no tz), `title` (text), `summary` (text), `tags` (text, nullable), `imageUrl` (text, nullable), `isHeadline` (boolean, default false), `scrapedAt` (timestamp with tz, not null, defaultNow).
+  - [x] Run `bunx drizzle-kit generate` in `app/` to produce migration `0003_*.sql`.
+  - [x] Apply migration to local dev DB: `PGPASSWORD=postgres psql -h localhost -p 5434 -U postgres -d postgres -f drizzle/0003_*.sql`.
+  - [x] Add migration step to `.github/workflows/app-ci.yml`.
+
+- [x] Task 2: ETL Script
+  - [x] Create `python/news_json2pg.py`. Reads JSON files from `data/news/` (glob `idx_news_*.json`, NOT `idx_news_detailed_*`). Upserts into `market_news` using ON CONFLICT (news_id) DO UPDATE. Sets `scraped_at = datetime.now(tz=UTC)` (ingestion time). Skips null/empty titles.
+
+- [x] Task 3: Backend — `GET /api/market/news`
+  - [x] Add endpoint to `app/src/server/routes/market.ts`. Query `marketNews` ordered by `publishedDate DESC`, limit 20. Include staleness from most recent `scrapedAt`. Response: `{ news: [{newsId, title, summary, tags, imageUrl, isHeadline, publishedDate}], staleness }`.
+
+- [x] Task 4: Frontend — `MarketNews` component
+  - [x] Create `app/src/web/components/market/MarketNews.tsx`. `useQuery` fetches `/api/market/news`. Show first 5 items; "Selengkapnya (N lagi)" button to expand all (same pattern as TrendingStocks). Each row: title + date + tags badge (if present). EOD badge in header. Loading/error/empty states.
+  - [x] Add to `app/src/web/routes/search.tsx` below SectorPerformance. Remove placeholder `<section className="search-coming-soon">`.
+  - [x] Add CSS to `app/src/web/routes/search.css`.
+
+- [x] Task 5: Tests
+  - [x] Add `describe("GET /news")` in `app/tests/market.test.ts`: empty table, ordered by publishedDate DESC, limit 20, staleness.
+  - [x] Add render test in `app/tests/search-route.test.tsx`.
+
+## Dev Notes
+
+- **Data source**: `data/news/idx_news_*.json` (NOT `idx_news_detailed_*` — no full HTML content needed). Fields: `Id` → `news_id`, `PublishedDate` → `published_date`, `Title` → `title`, `Summary` → `summary`, `Tags` → `tags`, `ImageUrl` → `image_url`, `IsHeadline` → `is_headline`.
+- **Primary key**: `news_id` (integer) — from IDX's `Id` field. Natural PK, stable across re-ingestion.
+- **`scraped_at`**: ingestion time (`datetime.now(tz=UTC)`), NOT `PublishedDate`. Per ADR-008 pattern.
+- **EOD badge**: news staleness follows same `computeStaleness` pattern — `scraped_at` determines freshness.
+- **`noUncheckedIndexedAccess`**: use `.map()` not array index.
+- **Progressive disclosure**: show 5 items default, "Selengkapnya (N lagi)" inline expand — same as TrendingStocks.
+- **Golden Rule**: news display is pure data — titles and summaries, no AI analysis here. Passes automatically.
+
+### Project Structure Notes
+
+New files:
+```
+app/src/web/components/market/MarketNews.tsx
+python/news_json2pg.py
+```
+
+Updated:
+- `app/src/server/db/market-schema.ts` — add `marketNews` table
+- `app/drizzle/0003_*.sql` — new migration (generated)
+- `app/drizzle/meta/_journal.json` — updated by drizzle-kit
+- `app/drizzle/meta/0003_snapshot.json` — generated
+- `app/src/server/routes/market.ts` — add `GET /api/market/news`
+- `app/src/web/routes/search.tsx` — add `<MarketNews />`, remove placeholder
+- `app/src/web/routes/search.css` — add news styles
+- `app/.github/workflows/app-ci.yml` — add migration step
+- `app/tests/market.test.ts` — add news tests
+- `app/tests/search-route.test.tsx` — add MarketNews render test
+
+### References
+
+- Linear: MAR-124 (this story) under MAR-111 (Epic 2)
+- ADR-008 Decision 5: `market_news` table from `scrape_idx_news.py` JSON
+- `data/news/idx_news_*.json` — existing news data files
+
+## Dev Agent Record
+
+### Agent Model Used
+
+claude-sonnet-4-6
+
+### Debug Log References
+
+### Completion Notes List
+
+### File List
+
+- `_bmad-output/implementation-artifacts/2-5-market-news.md` (this file)
+- `app/src/server/db/market-schema.ts` (updated — added `marketNews` table)
+- `app/drizzle/0003_aromatic_talkback.sql` (new migration)
+- `app/drizzle/meta/_journal.json` (updated by drizzle-kit)
+- `app/drizzle/meta/0003_snapshot.json` (generated by drizzle-kit)
+- `app/.github/workflows/app-ci.yml` (updated — migration step)
+- `python/news_json2pg.py` (new ETL script)
+- `app/src/server/routes/market.ts` (updated — GET /api/market/news)
+- `app/src/web/components/market/MarketNews.tsx` (new)
+- `app/src/web/routes/search.tsx` (updated — added MarketNews, removed placeholder)
+- `app/src/web/routes/search.css` (updated — MarketNews styles)
+- `app/tests/market.test.ts` (updated — GET /news tests)
+- `app/tests/search-route.test.tsx` (updated — MarketNews render test)
+
+### Change Log
+
+- 2026-06-26: Story created. Status set to in-progress.
+- 2026-06-26: All tasks complete. 80 tests pass. Status set to review.

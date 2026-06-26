@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { db } from "../src/server/db/client";
-import { indexSummary, dailyTradeSummary } from "../src/server/db/market-schema";
+import { indexSummary, dailyTradeSummary, marketNews } from "../src/server/db/market-schema";
 import { createMarketRoute } from "../src/server/routes/market";
 
 const app = createMarketRoute({ db });
@@ -45,6 +45,7 @@ function makeStockRow(overrides: Partial<typeof dailyTradeSummary.$inferInsert> 
 beforeEach(async () => {
   await db.delete(indexSummary);
   await db.delete(dailyTradeSummary);
+  await db.delete(marketNews);
 });
 
 describe("GET /ihsg", () => {
@@ -331,5 +332,64 @@ describe("GET /search", () => {
     const res = await app.request("/search?q=a");
     const body = await res.json() as { results: unknown[] };
     expect(body.results.length).toBeLessThanOrEqual(20);
+  });
+});
+
+describe("GET /news", () => {
+  function makeNewsRow(overrides: Partial<typeof marketNews.$inferInsert> = {}) {
+    return {
+      newsId: 1001,
+      publishedDate: new Date("2026-06-25T10:00:00"),
+      title: "Bursa Efek Indonesia mencatat kenaikan IHSG",
+      summary: "IHSG naik 1.5% pada sesi perdagangan hari ini.",
+      tags: "COMPOSITE",
+      isHeadline: false,
+      ...overrides,
+    };
+  }
+
+  test("returns empty state when table is empty", async () => {
+    const res = await app.request("/news");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { news: unknown[]; staleness: unknown };
+    expect(body.news).toEqual([]);
+    expect(body.staleness).toBeNull();
+  });
+
+  test("returns news ordered by publishedDate DESC", async () => {
+    await db.insert(marketNews).values([
+      makeNewsRow({ newsId: 1001, publishedDate: new Date("2026-06-23T08:00:00") }),
+      makeNewsRow({ newsId: 1002, publishedDate: new Date("2026-06-25T10:00:00") }),
+      makeNewsRow({ newsId: 1003, publishedDate: new Date("2026-06-24T12:00:00") }),
+    ]);
+
+    const res = await app.request("/news");
+    const body = await res.json() as { news: { newsId: number }[] };
+    expect(body.news[0]?.newsId).toBe(1002);
+    expect(body.news[1]?.newsId).toBe(1003);
+    expect(body.news[2]?.newsId).toBe(1001);
+  });
+
+  test("returns at most 20 news items", async () => {
+    const rows = Array.from({ length: 25 }, (_, i) =>
+      makeNewsRow({ newsId: 2000 + i, publishedDate: new Date(`2026-06-${String(i + 1).padStart(2, "0")}T10:00:00`) }),
+    );
+    await db.insert(marketNews).values(rows);
+
+    const res = await app.request("/news");
+    const body = await res.json() as { news: unknown[] };
+    expect(body.news).toHaveLength(20);
+  });
+
+  test("staleness reflects time since scraped_at", async () => {
+    const oldScrapedAt = new Date(Date.now() - 26 * 60 * 60 * 1000);
+    await db.insert(marketNews).values([
+      { ...makeNewsRow(), scrapedAt: oldScrapedAt },
+    ]);
+
+    const res = await app.request("/news");
+    const body = await res.json() as { staleness: { ageHours: number; isStale: boolean } };
+    expect(body.staleness.isStale).toBe(true);
+    expect(body.staleness.ageHours).toBeGreaterThan(24);
   });
 });
