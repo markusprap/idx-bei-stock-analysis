@@ -263,3 +263,35 @@
   color: var(--color-text, #2b2620);
   border-bottom: 1px solid var(--color-border, #e5e7eb);
 }
+
+/* CTA */
+
+.stock-detail-cta-wrap {
+  margin-top: 1.5rem;
+  display: flex;
+  justify-content: center;
+}
+
+.stock-detail-cta-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--color-accent-1, #2f5d4f);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+
+.stock-detail-cta-btn:hover {
+  background: #3d7a66;
+}
+
+.stock-detail-cta-icon {
+  width: 1.125rem;
+  height: 1.125rem;
+}

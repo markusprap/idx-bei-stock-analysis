@@ -9,6 +9,9 @@ export const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   component: ChatRoute,
+  validateSearch: (search: Record<string, unknown>) => ({
+    ticker: typeof search.ticker === "string" ? search.ticker.toUpperCase() : undefined,
+  }),
 });
 
 export const chatThreadRoute = createRoute({
