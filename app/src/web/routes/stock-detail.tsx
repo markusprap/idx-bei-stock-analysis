@@ -4,6 +4,7 @@ import { Sidebar } from "../components/layout/Sidebar";
 import { PriceChart } from "../components/stock/PriceChart";
 import { FundamentalsTable } from "../components/stock/FundamentalsTable";
 import { TechnicalIndicators } from "../components/stock/TechnicalIndicators";
+import { ForeignFlow } from "../components/stock/ForeignFlow";
 import "./stock-detail.css";
 
 type ChartResponse = {
@@ -56,6 +57,7 @@ export function StockDetailRoute() {
         <PriceChart code={code} />
         <TechnicalIndicators code={code} />
         <FundamentalsTable code={code} />
+        <ForeignFlow code={code} />
 
         <div className="stock-detail-cta-wrap">
           <button type="button" className="stock-detail-cta-btn" onClick={handleAskAI}>

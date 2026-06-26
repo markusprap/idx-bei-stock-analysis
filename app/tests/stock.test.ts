@@ -145,6 +145,78 @@ describe("GET /:code/chart", () => {
   });
 });
 
+describe("GET /:code/foreign-flow", () => {
+  const FF_CODE = "TLKM";
+
+  function makeFlowRow(tradeDate: string, foreignBuy: number, foreignSell: number) {
+    return makeStockRow({ stockCode: FF_CODE, tradeDate, foreignBuy, foreignSell });
+  }
+
+  test("returns empty state when table is empty", async () => {
+    const res = await app.request(`/${FF_CODE}/foreign-flow`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { code: string; data: unknown[]; staleness: unknown };
+    expect(body.code).toBe(FF_CODE);
+    expect(body.data).toEqual([]);
+    expect(body.staleness).toBeNull();
+  });
+
+  test("normalizes code to uppercase", async () => {
+    const res = await app.request(`/${FF_CODE.toLowerCase()}/foreign-flow`);
+    const body = await res.json() as { code: string };
+    expect(body.code).toBe(FF_CODE);
+  });
+
+  test("returns data with netFlow = foreignBuy - foreignSell", async () => {
+    await db.insert(dailyTradeSummary).values([
+      makeFlowRow("2026-06-25", 5_000_000_000, 3_000_000_000),
+    ]);
+
+    const res = await app.request(`/${FF_CODE}/foreign-flow`);
+    const body = await res.json() as { data: { tradeDate: string; foreignBuy: number; foreignSell: number; netFlow: number }[] };
+    expect(body.data).toHaveLength(1);
+    const row = body.data[0];
+    expect(row?.foreignBuy).toBe(5_000_000_000);
+    expect(row?.foreignSell).toBe(3_000_000_000);
+    expect(row?.netFlow).toBeCloseTo(2_000_000_000, 0);
+  });
+
+  test("returns rows ordered by tradeDate ASC", async () => {
+    await db.insert(dailyTradeSummary).values([
+      makeFlowRow("2026-06-25", 5e9, 3e9),
+      makeFlowRow("2026-06-23", 2e9, 4e9),
+      makeFlowRow("2026-06-24", 3e9, 3e9),
+    ]);
+
+    const res = await app.request(`/${FF_CODE}/foreign-flow`);
+    const body = await res.json() as { data: { tradeDate: string }[] };
+    expect(body.data[0]?.tradeDate).toBe("2026-06-23");
+    expect(body.data[2]?.tradeDate).toBe("2026-06-25");
+  });
+
+  test("netFlow is null when both foreignBuy and foreignSell are null", async () => {
+    await db.insert(dailyTradeSummary).values([
+      makeStockRow({ stockCode: FF_CODE, tradeDate: "2026-06-25", foreignBuy: null, foreignSell: null }),
+    ]);
+
+    const res = await app.request(`/${FF_CODE}/foreign-flow`);
+    const body = await res.json() as { data: { netFlow: null }[] };
+    expect(body.data[0]?.netFlow).toBeNull();
+  });
+
+  test("staleness reflects time since scraped_at", async () => {
+    const oldScrapedAt = new Date(Date.now() - 26 * 60 * 60 * 1000);
+    await db.insert(dailyTradeSummary).values([
+      { ...makeFlowRow("2026-06-25", 5e9, 3e9), scrapedAt: oldScrapedAt },
+    ]);
+
+    const res = await app.request(`/${FF_CODE}/foreign-flow`);
+    const body = await res.json() as { staleness: { ageHours: number; isStale: boolean } };
+    expect(body.staleness.isStale).toBe(true);
+    expect(body.staleness.ageHours).toBeGreaterThan(24);
+  });
+});
+
 describe("GET /:code/fundamentals", () => {
   test("returns empty state when table is empty", async () => {
     const res = await app.request(`/${FUND_CODE}/fundamentals`);
