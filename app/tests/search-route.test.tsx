@@ -82,4 +82,10 @@ describe("/search route", () => {
     expect(html).toContain("trending-stocks");
     expect(html).toContain("Saham Trending");
   });
+
+  test("renders StockSearch input on the search page", async () => {
+    const html = await renderSearch();
+    expect(html).toContain("stock-search");
+    expect(html).toContain("Cari saham");
+  });
 });

@@ -191,3 +191,46 @@ describe("GET /trending", () => {
     expect(body.topVolume).toHaveLength(10);
   });
 });
+
+describe("GET /search", () => {
+  test("returns empty results for empty query", async () => {
+    const res = await app.request("/search?q=");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: unknown[]; query: string };
+    expect(body.results).toEqual([]);
+    expect(body.query).toBe("");
+  });
+
+  test("returns empty results when q param is absent", async () => {
+    const res = await app.request("/search");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: unknown[] };
+    expect(body.results).toEqual([]);
+  });
+
+  test("returns BBCA for exact ticker match", async () => {
+    const res = await app.request("/search?q=BBCA");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { results: { code: string; stockName: string }[] };
+    expect(body.results.length).toBeGreaterThan(0);
+    expect(body.results.some((r) => r.code === "BBCA")).toBe(true);
+  });
+
+  test("returns BBCA for partial company name match", async () => {
+    const res = await app.request("/search?q=Bank+Central");
+    const body = await res.json() as { results: { code: string }[] };
+    expect(body.results.some((r) => r.code === "BBCA")).toBe(true);
+  });
+
+  test("returns empty for non-matching query", async () => {
+    const res = await app.request("/search?q=ZZZZNOTEXISTS");
+    const body = await res.json() as { results: unknown[] };
+    expect(body.results).toHaveLength(0);
+  });
+
+  test("returns at most 20 results", async () => {
+    const res = await app.request("/search?q=a");
+    const body = await res.json() as { results: unknown[] };
+    expect(body.results.length).toBeLessThanOrEqual(20);
+  });
+});
