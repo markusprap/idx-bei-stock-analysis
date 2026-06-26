@@ -20,6 +20,7 @@ data/companyDetailsByKodeEmiten.json
 data/companySummaryByKodeEmiten.json
 data/financial_ratio.json
 data/news/
+data/daily/
 
 # --- Project Specific ---
 .claude/
