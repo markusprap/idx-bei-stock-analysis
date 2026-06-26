@@ -38,6 +38,8 @@ export const dailyTradeSummary = pgTable(
     volume: doublePrecision("volume"),
     value: doublePrecision("value"),
     frequency: doublePrecision("frequency"),
+    foreignBuy: doublePrecision("foreign_buy"),
+    foreignSell: doublePrecision("foreign_sell"),
     scrapedAt: timestamp("scraped_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [primaryKey({ columns: [table.stockCode, table.tradeDate] })],

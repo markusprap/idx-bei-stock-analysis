@@ -60,6 +60,9 @@ jobs:
       - name: Apply market_news migration
         run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0003_aromatic_talkback.sql
 
+      - name: Apply foreign_buy/foreign_sell migration
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0004_bitter_lyja.sql
+
       - run: bun run lint
 
       - run: bun run typecheck

@@ -21,11 +21,24 @@ function fakeLlm(reply: string) {
   return { llm, create };
 }
 
-function dbReturning(rows: unknown[]) {
+function dbReturning(rows: unknown[], tradeRows: unknown[] = []) {
+  let callCount = 0;
+  const responses = [rows, tradeRows];
+
+  const makeChainable = (data: unknown[]) => {
+    const p = Promise.resolve(data);
+    (p as unknown as { orderBy: (x: unknown) => { limit: (n: number) => Promise<unknown[]> } }).orderBy =
+      () => ({ limit: async () => data });
+    return p;
+  };
+
   return {
     select: () => ({
       from: () => ({
-        where: async () => rows,
+        where: (_cond: unknown) => {
+          const idx = callCount++;
+          return makeChainable(responses[idx] ?? []);
+        },
       }),
     }),
   } as unknown as typeof DbClient;
@@ -46,8 +59,8 @@ describe("extractTicker", () => {
 });
 
 describe("asksAboutPriceOrTechnicalData", () => {
-  test("detects a price question", () => {
-    expect(asksAboutPriceOrTechnicalData("Harga BBCA hari ini berapa?")).toBe(true);
+  test("detects a chart/grafik question", () => {
+    expect(asksAboutPriceOrTechnicalData("Tampilkan grafik BBCA 6 bulan")).toBe(true);
   });
 
   test("detects a technical-indicator question", () => {
@@ -57,16 +70,20 @@ describe("asksAboutPriceOrTechnicalData", () => {
   test("does not flag an ordinary fundamental question", () => {
     expect(asksAboutPriceOrTechnicalData("Gimana valuasi BBCA?")).toBe(false);
   });
+
+  test("does not flag a price/harga question — harga now answered via fundamental_card", () => {
+    expect(asksAboutPriceOrTechnicalData("Harga BBCA hari ini berapa?")).toBe(false);
+  });
 });
 
-describe("handleChatMessage — price/technical out of scope", () => {
+describe("handleChatMessage — chart/technical out of scope", () => {
   test("short-circuits without calling the LLM or the DB", async () => {
     const { llm, create } = fakeLlm("should never be called");
 
-    const reply = await handleChatMessage("Harga BBCA berapa?", { db: dbReturning([]), llm });
+    const reply = await handleChatMessage("Tampilkan grafik BBCA 1 tahun", { db: dbReturning([]), llm });
 
     expect(reply.type).toBe("text");
-    if (reply.type === "text") expect(reply.message).toContain("belum punya data harga");
+    if (reply.type === "text") expect(reply.message).toContain("grafik");
     expect(create).not.toHaveBeenCalled();
   });
 });
@@ -160,6 +177,53 @@ describe("handleChatMessage — ticker with fundamental data (AC 1 + AC 2)", () 
 
     const rows = await db.select().from(financialRatios).where(eq(financialRatios.code, "BBCA"));
     expect(rows.length).toBeGreaterThan(0);
+  });
+});
+
+describe("handleChatMessage — harga query returns fundamental_card with trade data", () => {
+  test("'harga BBCA' returns fundamental_card with close/changePct when trade data present", async () => {
+    const fundamentalRow = { code: "BBCA", per: 22.38, stockName: "BCA" } as unknown as FinancialRatioRow;
+    const tradeRow = {
+      stockCode: "BBCA",
+      tradeDate: "2026-06-25",
+      close: 9450,
+      change: 50,
+      changePct: 0.53,
+      volume: 12000000,
+      value: 113400000000,
+      foreignBuy: 5000000000,
+      foreignSell: 3000000000,
+    };
+    const { llm, create } = fakeLlm("should never be called");
+
+    const reply = await handleChatMessage("Harga BBCA berapa sekarang?", {
+      db: dbReturning([fundamentalRow], [tradeRow]),
+      llm,
+    });
+
+    expect(reply.type).toBe("fundamental_card");
+    expect(create).not.toHaveBeenCalled();
+
+    const card = reply as FundamentalCardReply;
+    expect(card.close).toBe(9450);
+    expect(card.changePct).toBe(0.53);
+    expect(card.tradeDate).toBe("2026-06-25");
+    expect(card.foreignBuy).toBe(5000000000);
+  });
+
+  test("fundamental_card still works when no trade data available (null fields)", async () => {
+    const row = { code: "AAAA", per: 10 } as unknown as FinancialRatioRow;
+    const { llm } = fakeLlm("");
+
+    const reply = await handleChatMessage("AAAA gimana fundamentalnya?", {
+      db: dbReturning([row], []),
+      llm,
+    });
+
+    expect(reply.type).toBe("fundamental_card");
+    const card = reply as FundamentalCardReply;
+    expect(card.close).toBeNull();
+    expect(card.tradeDate).toBeNull();
   });
 });
 

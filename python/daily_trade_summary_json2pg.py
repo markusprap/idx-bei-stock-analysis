@@ -1,5 +1,15 @@
+"""
+ETL: IDX daily stock summary JSON → daily_trade_summary Postgres table.
+
+Usage:
+  uv run python daily_trade_summary_json2pg.py                # single file (today's data)
+  uv run python daily_trade_summary_json2pg.py --all-daily    # all files in data/daily/
+"""
+
 import json
 import os
+import glob
+import argparse
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
@@ -15,17 +25,23 @@ PG_CONFIG = {
     "password": os.getenv("POSTGRES_PASSWORD", ""),
 }
 
-INPUT_FILE = os.path.join(os.path.dirname(__file__), "../data/companySummaryByKodeEmiten.json")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "../data")
+INPUT_FILE = os.path.join(DATA_DIR, "companySummaryByKodeEmiten.json")
+DAILY_DIR = os.path.join(DATA_DIR, "daily")
 
 UPSERT_SQL = """
 INSERT INTO daily_trade_summary (
     stock_code, trade_date, stock_name, previous, open_price,
     high, low, close, change, change_pct,
-    volume, value, frequency, scraped_at
+    volume, value, frequency,
+    foreign_buy, foreign_sell,
+    scraped_at
 ) VALUES (
     %(stock_code)s, %(trade_date)s, %(stock_name)s, %(previous)s, %(open_price)s,
     %(high)s, %(low)s, %(close)s, %(change)s, %(change_pct)s,
-    %(volume)s, %(value)s, %(frequency)s, %(scraped_at)s
+    %(volume)s, %(value)s, %(frequency)s,
+    %(foreign_buy)s, %(foreign_sell)s,
+    %(scraped_at)s
 )
 ON CONFLICT (stock_code, trade_date) DO UPDATE SET
     stock_name   = EXCLUDED.stock_name,
@@ -39,6 +55,8 @@ ON CONFLICT (stock_code, trade_date) DO UPDATE SET
     volume       = EXCLUDED.volume,
     value        = EXCLUDED.value,
     frequency    = EXCLUDED.frequency,
+    foreign_buy  = EXCLUDED.foreign_buy,
+    foreign_sell = EXCLUDED.foreign_sell,
     scraped_at   = EXCLUDED.scraped_at;
 """
 
@@ -81,6 +99,8 @@ def upsert_rows(conn: psycopg2.extensions.connection, rows: list[dict], scraped_
                     "volume": row.get("Volume"),
                     "value": row.get("Value"),
                     "frequency": row.get("Frequency"),
+                    "foreign_buy": row.get("ForeignBuy"),
+                    "foreign_sell": row.get("ForeignSell"),
                     "scraped_at": scraped_at,
                 },
             )
@@ -89,17 +109,42 @@ def upsert_rows(conn: psycopg2.extensions.connection, rows: list[dict], scraped_
     return count
 
 
-def main() -> None:
-    print(f"Reading {INPUT_FILE}...")
-    rows = load_json(INPUT_FILE)
-    print(f"Loaded {len(rows)} stock rows")
-
+def process_file(conn: psycopg2.extensions.connection, path: str) -> int:
+    rows = load_json(path)
+    if not rows:
+        return 0
     scraped_at = datetime.now(tz=timezone.utc)
+    return upsert_rows(conn, rows, scraped_at)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="ETL: IDX daily stock summary → Postgres")
+    parser.add_argument(
+        "--all-daily",
+        action="store_true",
+        help="Process all JSON files in data/daily/ (for backfill)",
+    )
+    args = parser.parse_args()
 
     conn = psycopg2.connect(**PG_CONFIG)
     try:
-        count = upsert_rows(conn, rows, scraped_at)
-        print(f"Upserted {count} rows into daily_trade_summary (scraped_at={scraped_at.isoformat()})")
+        if args.all_daily:
+            files = sorted(glob.glob(os.path.join(DAILY_DIR, "*.json")))
+            print(f"Processing {len(files)} files from {DAILY_DIR}/...")
+            total = 0
+            for i, path in enumerate(files):
+                count = process_file(conn, path)
+                total += count
+                if (i + 1) % 50 == 0:
+                    print(f"  processed {i + 1}/{len(files)} files ({total} rows total)")
+            print(f"Done. Upserted {total} rows total.")
+        else:
+            print(f"Reading {INPUT_FILE}...")
+            rows = load_json(INPUT_FILE)
+            print(f"Loaded {len(rows)} stock rows")
+            scraped_at = datetime.now(tz=timezone.utc)
+            count = upsert_rows(conn, rows, scraped_at)
+            print(f"Upserted {count} rows into daily_trade_summary (scraped_at={scraped_at.isoformat()})")
     finally:
         conn.close()
 

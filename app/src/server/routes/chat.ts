@@ -1,7 +1,8 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import type { db as DbClient } from "../db/client";
 import { financialRatios, type FinancialRatioRow } from "../db/schema";
+import { dailyTradeSummary } from "../db/market-schema";
 import type { llm as LlmClient } from "../llm/client";
 import { CHAT_MODEL } from "../llm/client";
 import { containsGoldenRuleViolation, buildSafeFallbackReply } from "../golden-rule/guard";
@@ -29,16 +30,25 @@ export type FundamentalCardReply = {
   assets: number | null;
   liabilities: number | null;
   equity: number | null;
+  // Latest EOD trade data from daily_trade_summary
+  tradeDate: string | null;
+  close: number | null;
+  change: number | null;
+  changePct: number | null;
+  volume: number | null;
+  value: number | null;
+  foreignBuy: number | null;
+  foreignSell: number | null;
 };
 
 export type ChatReply = TextReply | FundamentalCardReply;
 
 const TICKER_PATTERN = /\b[A-Z]{4}\b/;
 const PRICE_OR_TECHNICAL_PATTERN =
-  /harga|price|grafik|\bchart\b|ohlc|volume|\brsi\b|macd|bollinger|stochastic|teknikal|technical/i;
+  /grafik|\bchart\b|\brsi\b|macd|bollinger|stochastic|teknikal|technical/i;
 
 const NO_PRICE_DATA_REPLY =
-  "Sahamigo belum punya data harga, grafik, atau indikator teknikal — sumber data kami baru mencakup data fundamental/valuasi (PER, PBV, ROE, dan sejenisnya). Coba tanya soal valuasi atau fundamental sahamnya, ya.";
+  "Sahamigo belum punya grafik atau indikator teknikal (RSI, MACD, Bollinger Bands, dsb) — fitur ini akan hadir segera. Untuk sekarang, coba tanya soal harga, valuasi, atau fundamental sahamnya, ya.";
 
 const GOLDEN_RULE_INSTRUCTIONS = [
   "ATURAN WAJIB (Golden Rule, tidak bisa dinegosiasi):",
@@ -125,6 +135,14 @@ export async function handleChatMessage(message: string, deps: ChatDeps): Promis
     return { type: "text", message: noDataReply(ticker) };
   }
 
+  const tradeRows = await deps.db
+    .select()
+    .from(dailyTradeSummary)
+    .where(eq(dailyTradeSummary.stockCode, ticker))
+    .orderBy(desc(dailyTradeSummary.tradeDate))
+    .limit(1);
+  const trade = tradeRows[0] ?? null;
+
   return {
     type: "fundamental_card",
     ticker: row.code ?? ticker,
@@ -145,6 +163,14 @@ export async function handleChatMessage(message: string, deps: ChatDeps): Promis
     assets: row.assets ?? null,
     liabilities: row.liabilities ?? null,
     equity: row.equity ?? null,
+    tradeDate: trade?.tradeDate ?? null,
+    close: trade?.close ?? null,
+    change: trade?.change ?? null,
+    changePct: trade?.changePct ?? null,
+    volume: trade?.volume ?? null,
+    value: trade?.value ?? null,
+    foreignBuy: trade?.foreignBuy ?? null,
+    foreignSell: trade?.foreignSell ?? null,
   };
 }
 
