@@ -34,3 +34,11 @@ export function SearchMagnifierIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function FilterIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" width="18" height="18" {...strokeProps}>
+      <path d="M3 6h18M7 12h10M11 18h2" />
+    </svg>
+  );
+}

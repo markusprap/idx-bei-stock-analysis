@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { ChatBubbleIcon, SearchMagnifierIcon, StarOutlineIcon } from "../icons";
+import { ChatBubbleIcon, SearchMagnifierIcon, StarOutlineIcon, FilterIcon } from "../icons";
 import "./Sidebar.css";
 
 type Thread = {
@@ -44,6 +44,10 @@ export function Sidebar() {
         <button type="button" className="sidebar-nav-pill" onClick={() => navigate({ to: "/search" })}>
           <SearchMagnifierIcon />
           Search
+        </button>
+        <button type="button" className="sidebar-nav-pill" onClick={() => navigate({ to: "/screener" })}>
+          <FilterIcon />
+          Screener
         </button>
         <button type="button" className="sidebar-nav-pill" disabled>
           <StarOutlineIcon />
