@@ -51,6 +51,9 @@ jobs:
       - name: Apply chat_threads/chat_messages migration
         run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0000_careful_husk.sql
 
+      - name: Apply index_summary migration
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0001_worried_mathemanic.sql
+
       - run: bun run lint
 
       - run: bun run typecheck
