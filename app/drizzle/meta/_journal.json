@@ -15,6 +15,13 @@
       "when": 1782452469837,
       "tag": "0001_worried_mathemanic",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1782465824867,
+      "tag": "0002_classy_catseye",
+      "breakpoints": true
     }
   ]
 }

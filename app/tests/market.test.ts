@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { db } from "../src/server/db/client";
-import { indexSummary } from "../src/server/db/market-schema";
+import { indexSummary, dailyTradeSummary } from "../src/server/db/market-schema";
 import { createMarketRoute } from "../src/server/routes/market";
 
 const app = createMarketRoute({ db });
@@ -23,8 +23,28 @@ function makeRow(overrides: Partial<typeof indexSummary.$inferInsert> = {}) {
   };
 }
 
+function makeStockRow(overrides: Partial<typeof dailyTradeSummary.$inferInsert> = {}) {
+  return {
+    stockCode: "BBCA",
+    tradeDate: "2026-06-25",
+    stockName: "Bank Central Asia Tbk.",
+    previous: 9000,
+    openPrice: 9100,
+    high: 9200,
+    low: 8950,
+    close: 9150,
+    change: 150,
+    changePct: 1.67,
+    volume: 50000000,
+    value: 457500000000,
+    frequency: 12000,
+    ...overrides,
+  };
+}
+
 beforeEach(async () => {
   await db.delete(indexSummary);
+  await db.delete(dailyTradeSummary);
 });
 
 describe("GET /ihsg", () => {
@@ -86,5 +106,88 @@ describe("GET /ihsg", () => {
     const body = await res.json() as { data: unknown[]; staleness: unknown };
     expect(body.data).toHaveLength(0);
     expect(body.staleness).toBeNull();
+  });
+});
+
+describe("GET /trending", () => {
+  test("returns empty state when table is empty", async () => {
+    const res = await app.request("/trending");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { tradeDate: unknown; gainers: unknown[]; losers: unknown[]; staleness: unknown };
+    expect(body.tradeDate).toBeNull();
+    expect(body.gainers).toEqual([]);
+    expect(body.losers).toEqual([]);
+    expect(body.staleness).toBeNull();
+  });
+
+  test("returns top gainers ordered by changePct DESC", async () => {
+    await db.insert(dailyTradeSummary).values([
+      makeStockRow({ stockCode: "BBCA", changePct: 5.0 }),
+      makeStockRow({ stockCode: "TLKM", changePct: 2.5 }),
+      makeStockRow({ stockCode: "ASII", changePct: 8.0 }),
+    ]);
+
+    const res = await app.request("/trending");
+    const body = await res.json() as { gainers: { stockCode: string; changePct: number }[] };
+    expect(body.gainers).toHaveLength(3);
+    expect(body.gainers[0]?.stockCode).toBe("ASII");
+    expect(body.gainers[1]?.stockCode).toBe("BBCA");
+    expect(body.gainers[2]?.stockCode).toBe("TLKM");
+  });
+
+  test("returns top losers ordered by changePct ASC", async () => {
+    await db.insert(dailyTradeSummary).values([
+      makeStockRow({ stockCode: "BBCA", changePct: -1.0 }),
+      makeStockRow({ stockCode: "TLKM", changePct: -5.0 }),
+      makeStockRow({ stockCode: "ASII", changePct: -3.0 }),
+    ]);
+
+    const res = await app.request("/trending");
+    const body = await res.json() as { losers: { stockCode: string }[] };
+    expect(body.losers[0]?.stockCode).toBe("TLKM");
+    expect(body.losers[1]?.stockCode).toBe("ASII");
+    expect(body.losers[2]?.stockCode).toBe("BBCA");
+  });
+
+  test("excludes stocks with null or zero close price", async () => {
+    await db.insert(dailyTradeSummary).values([
+      makeStockRow({ stockCode: "ACTIVE", close: 5000, changePct: 2.0 }),
+      makeStockRow({ stockCode: "NOCLOS", close: null, changePct: 1.0 }),
+      makeStockRow({ stockCode: "ZEROCL", close: 0, changePct: 0.5 }),
+    ]);
+
+    const res = await app.request("/trending");
+    const body = await res.json() as { gainers: { stockCode: string }[]; topValue: { stockCode: string }[] };
+    expect(body.gainers.map((r) => r.stockCode)).toContain("ACTIVE");
+    expect(body.gainers.map((r) => r.stockCode)).not.toContain("NOCLOS");
+    expect(body.gainers.map((r) => r.stockCode)).not.toContain("ZEROCL");
+    expect(body.topValue.map((r) => r.stockCode)).not.toContain("NOCLOS");
+    expect(body.topValue.map((r) => r.stockCode)).not.toContain("ZEROCL");
+  });
+
+  test("staleness reflects time since scraped_at, not tradeDate", async () => {
+    const oldScrapedAt = new Date(Date.now() - 26 * 60 * 60 * 1000);
+    await db.insert(dailyTradeSummary).values([
+      { ...makeStockRow(), scrapedAt: oldScrapedAt },
+    ]);
+
+    const res = await app.request("/trending");
+    const body = await res.json() as { staleness: { ageHours: number; isStale: boolean } };
+    expect(body.staleness.isStale).toBe(true);
+    expect(body.staleness.ageHours).toBeGreaterThan(24);
+  });
+
+  test("returns at most 10 rows per category", async () => {
+    const rows = Array.from({ length: 15 }, (_, i) =>
+      makeStockRow({ stockCode: `STK${String(i).padStart(2, "0")}`, changePct: i * 0.5 }),
+    );
+    await db.insert(dailyTradeSummary).values(rows);
+
+    const res = await app.request("/trending");
+    const body = await res.json() as { gainers: unknown[]; losers: unknown[]; topValue: unknown[]; topVolume: unknown[] };
+    expect(body.gainers).toHaveLength(10);
+    expect(body.losers).toHaveLength(10);
+    expect(body.topValue).toHaveLength(10);
+    expect(body.topVolume).toHaveLength(10);
   });
 });

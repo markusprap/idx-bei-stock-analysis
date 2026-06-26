@@ -25,10 +25,17 @@ const MOCK_IHSG_RESPONSE = {
   },
 };
 
-async function renderSearch(mockResponse = MOCK_IHSG_RESPONSE): Promise<string> {
-  global.fetch = mock(async () =>
-    new Response(JSON.stringify(mockResponse), { status: 200 }),
-  ) as unknown as typeof fetch;
+async function renderSearch(
+  mockIhsg: unknown = MOCK_IHSG_RESPONSE,
+  mockTrending: unknown = { tradeDate: null, gainers: [], losers: [], topValue: [], topVolume: [], staleness: null },
+): Promise<string> {
+  global.fetch = mock(async (url: RequestInfo | URL) => {
+    const urlStr = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
+    if (urlStr.includes("/trending")) {
+      return new Response(JSON.stringify(mockTrending), { status: 200 });
+    }
+    return new Response(JSON.stringify(mockIhsg), { status: 200 });
+  }) as unknown as typeof fetch;
 
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -68,5 +75,11 @@ describe("/search route", () => {
     const html = await renderSearch({ data: [], staleness: null } as any);
     expect(html).toContain("IHSG");
     expect(html).toContain("EOD");
+  });
+
+  test("renders TrendingStocks loading state", async () => {
+    const html = await renderSearch();
+    expect(html).toContain("trending-stocks");
+    expect(html).toContain("Saham Trending");
   });
 });
