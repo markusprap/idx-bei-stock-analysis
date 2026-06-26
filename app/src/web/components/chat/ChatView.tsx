@@ -2,7 +2,28 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ChatBubbleIcon } from "../icons";
+import { FundamentalCard, type FundamentalCardData } from "./FundamentalCard";
 import "./ChatView.css";
+
+type TextReply = { type: "text"; message: string };
+type ChatReply = TextReply | FundamentalCardData;
+
+function parseReply(content: string): ChatReply {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      "type" in parsed &&
+      (parsed.type === "text" || parsed.type === "fundamental_card")
+    ) {
+      return parsed as ChatReply;
+    }
+  } catch {
+    // not JSON — treat as legacy plain text
+  }
+  return { type: "text", message: content };
+}
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -12,7 +33,7 @@ type ChatMessage = {
 async function sendChatMessage(
   message: string,
   threadId: string | null,
-): Promise<{ threadId: string; reply: string }> {
+): Promise<{ threadId: string; reply: ChatReply }> {
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -99,11 +120,28 @@ export function ChatView({ threadId, ticker }: ChatViewProps) {
         </div>
       ) : (
         <div className="chat-view-messages">
-          {messages.map((message, index) => (
-            <p key={index} className={`chat-view-message chat-view-message--${message.role}`}>
-              {message.content}
-            </p>
-          ))}
+          {messages.map((message, index) => {
+            if (message.role === "user") {
+              return (
+                <p key={index} className="chat-view-message chat-view-message--user">
+                  {message.content}
+                </p>
+              );
+            }
+            const reply = parseReply(message.content);
+            if (reply.type === "fundamental_card") {
+              return (
+                <div key={index} className="chat-view-message chat-view-message--assistant">
+                  <FundamentalCard data={reply} />
+                </div>
+              );
+            }
+            return (
+              <p key={index} className="chat-view-message chat-view-message--assistant">
+                {reply.message}
+              </p>
+            );
+          })}
           {mutation.isPending && (
             <>
               <p className="chat-view-message chat-view-message--user">{mutation.variables}</p>

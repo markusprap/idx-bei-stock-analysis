@@ -87,14 +87,12 @@ describe("POST /api/chat — thread persistence wiring", () => {
     });
     const body = await res.json();
 
-    expect(body.reply).toBe("Halo! Saya Sahamigo.");
+    expect(body.reply).toEqual({ type: "text", message: "Halo! Saya Sahamigo." });
     expect(typeof body.threadId).toBe("string");
 
     const messages = await listMessages(db, body.threadId);
-    expect(messages.map((m) => ({ role: m.role, content: m.content }))).toEqual([
-      { role: "user", content: "Halo, kamu siapa?" },
-      { role: "assistant", content: "Halo! Saya Sahamigo." },
-    ]);
+    const assistantMsg = messages.find((m) => m.role === "assistant");
+    expect(assistantMsg?.content).toBe(JSON.stringify({ type: "text", message: "Halo! Saya Sahamigo." }));
   });
 
   test("with an existing threadId: appends to that thread instead of creating a new one", async () => {

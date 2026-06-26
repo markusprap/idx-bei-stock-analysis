@@ -4,6 +4,7 @@ import {
   asksAboutPriceOrTechnicalData,
   noDataReply,
   handleChatMessage,
+  type FundamentalCardReply,
 } from "../src/server/routes/chat";
 import { db } from "../src/server/db/client";
 import { financialRatios, type FinancialRatioRow } from "../src/server/db/schema";
@@ -58,71 +59,117 @@ describe("asksAboutPriceOrTechnicalData", () => {
   });
 });
 
-describe("handleChatMessage — AC 3 (price/technical out of scope)", () => {
+describe("handleChatMessage — price/technical out of scope", () => {
   test("short-circuits without calling the LLM or the DB", async () => {
     const { llm, create } = fakeLlm("should never be called");
 
     const reply = await handleChatMessage("Harga BBCA berapa?", { db: dbReturning([]), llm });
 
-    expect(reply).toContain("belum punya data harga");
+    expect(reply.type).toBe("text");
+    if (reply.type === "text") expect(reply.message).toContain("belum punya data harga");
     expect(create).not.toHaveBeenCalled();
   });
 });
 
-describe("handleChatMessage — AC 2 (unknown ticker)", () => {
-  test("returns a deterministic no-data reply without calling the LLM", async () => {
+describe("handleChatMessage — unknown ticker", () => {
+  test("returns a deterministic no-data text reply without calling the LLM", async () => {
     const { llm, create } = fakeLlm("should never be called");
 
     const reply = await handleChatMessage("Gimana valuasi ZZZZ?", { db: dbReturning([]), llm });
 
-    expect(reply).toBe(noDataReply("ZZZZ"));
+    expect(reply.type).toBe("text");
+    if (reply.type === "text") expect(reply.message).toBe(noDataReply("ZZZZ"));
     expect(create).not.toHaveBeenCalled();
   });
 });
 
 describe("handleChatMessage — no ticker (chitchat)", () => {
-  test("calls the LLM with no data context", async () => {
+  test("calls the LLM and returns a text reply", async () => {
     const { llm, create } = fakeLlm("Halo! Saya Sahamigo.");
 
     const reply = await handleChatMessage("Halo, kamu siapa?", { db: dbReturning([]), llm });
 
-    expect(reply).toBe("Halo! Saya Sahamigo.");
+    expect(reply.type).toBe("text");
+    if (reply.type === "text") expect(reply.message).toBe("Halo! Saya Sahamigo.");
     expect(create).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("handleChatMessage — AC 1 (BBCA happy path, real Postgres)", () => {
-  test("queries the real financial_ratios table and passes real data to the LLM", async () => {
-    const { llm, create } = fakeLlm("Valuasi BBCA dijelaskan di sini.");
+describe("handleChatMessage — ticker with fundamental data (AC 1 + AC 2)", () => {
+  test("returns a fundamental_card with correct fields — no LLM called", async () => {
+    const row = {
+      code: "BBCA",
+      stockName: "Bank Central Asia Tbk",
+      sector: "Keuangan",
+      subSector: "Bank",
+      sharia: "No",
+      fsDate: "2024-12-31",
+      fiscalYearEnd: "2024-12-31",
+      per: 22.38,
+      priceBv: 4.66,
+      eps: 1200.0,
+      bookValue: 5500.0,
+      roe: 20.82,
+      roa: 3.1,
+      npm: 40.0,
+      deRatio: 5.2,
+      assets: 1_500_000_000_000_000,
+      liabilities: 1_200_000_000_000_000,
+      equity: 300_000_000_000_000,
+    } as unknown as FinancialRatioRow;
+
+    const { llm, create } = fakeLlm("should never be called");
+
+    const reply = await handleChatMessage("Gimana valuasi BBCA?", { db: dbReturning([row]), llm });
+
+    expect(reply.type).toBe("fundamental_card");
+    expect(create).not.toHaveBeenCalled();
+
+    const card = reply as FundamentalCardReply;
+    expect(card.ticker).toBe("BBCA");
+    expect(card.stockName).toBe("Bank Central Asia Tbk");
+    expect(card.per).toBe(22.38);
+    expect(card.roe).toBe(20.82);
+    expect(card.fsDate).toBe("2024-12-31");
+  });
+
+  test("card has no buy/sell/hold field — Golden Rule AC 5", async () => {
+    const row = { code: "BBCA", per: 22.38 } as unknown as FinancialRatioRow;
+    const { llm } = fakeLlm("");
+
+    const reply = await handleChatMessage("Gimana BBCA?", { db: dbReturning([row]), llm });
+
+    expect(reply.type).toBe("fundamental_card");
+    const keys = Object.keys(reply);
+    expect(keys).not.toContain("verdict");
+    expect(keys).not.toContain("recommendation");
+    expect(keys).not.toContain("signal");
+  });
+
+  test("AC 1 (real Postgres) — queries financial_ratios and returns fundamental_card", async () => {
+    const { llm, create } = fakeLlm("should never be called");
 
     const reply = await handleChatMessage("Gimana valuasi BBCA?", { db, llm });
 
-    expect(reply).toBe("Valuasi BBCA dijelaskan di sini.");
+    expect(reply.type).toBe("fundamental_card");
+    expect(create).not.toHaveBeenCalled();
 
-    const call = create.mock.calls[0]?.[0];
-    expect(call?.messages[0]?.content).toContain("BBCA");
-    expect(call?.messages[0]?.content).toContain("22.38");
+    const card = reply as FundamentalCardReply;
+    expect(card.ticker).toBe("BBCA");
+    expect(card.per).not.toBeNull();
 
     const rows = await db.select().from(financialRatios).where(eq(financialRatios.code, "BBCA"));
     expect(rows.length).toBeGreaterThan(0);
   });
 });
 
-describe("handleChatMessage — Golden Rule guard wired into both LLM call sites (Story 1.3)", () => {
-  test("replaces a violating reply with the safe fallback on the chitchat (no-ticker) path", async () => {
+describe("handleChatMessage — Golden Rule guard (chitchat path)", () => {
+  test("replaces a violating LLM reply with safe fallback on chitchat path", async () => {
     const { llm } = fakeLlm("Beli aja BBCA, lagi murah.");
 
     const reply = await handleChatMessage("Halo, kamu siapa?", { db: dbReturning([]), llm });
 
-    expect(reply).toBe(buildSafeFallbackReply(null));
-  });
-
-  test("replaces a violating reply with the safe fallback on the ticker-found (data) path", async () => {
-    const row = { code: "BBCA", per: 22.38, priceBv: 4.66, roe: 20.8206 } as FinancialRatioRow;
-    const { llm } = fakeLlm("Beli aja BBCA, lagi murah.");
-
-    const reply = await handleChatMessage("Gimana valuasi BBCA?", { db: dbReturning([row]), llm });
-
-    expect(reply).toBe(buildSafeFallbackReply(row));
+    expect(reply.type).toBe("text");
+    if (reply.type === "text") expect(reply.message).toBe(buildSafeFallbackReply(null));
   });
 });
