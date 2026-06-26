@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { desc, asc, eq, isNotNull, and, or, ilike, sql } from "drizzle-orm";
+import { desc, asc, eq, isNotNull, and, or, ilike, inArray, sql } from "drizzle-orm";
 import type { db as DbClient } from "../db/client";
 import { indexSummary, dailyTradeSummary } from "../db/market-schema";
 import { financialRatios } from "../db/schema";
@@ -10,6 +10,25 @@ const IHSG_CODE = "COMPOSITE";
 const CHART_LIMIT = 30;
 const TRENDING_LIMIT = 10;
 const STALENESS_THRESHOLD_HOURS = 24;
+
+const SECTOR_CODES = [
+  "IDXENERGY", "IDXBASIC", "IDXINDUST", "IDXNONCYC", "IDXCYCLIC",
+  "IDXHEALTH", "IDXFINANCE", "IDXPROPERT", "IDXTECHNO", "IDXINFRA", "IDXTRANS",
+] as const;
+
+const SECTOR_NAMES: Record<string, string> = {
+  IDXENERGY: "Energi",
+  IDXBASIC: "Barang Baku",
+  IDXINDUST: "Industri",
+  IDXNONCYC: "Kons. Non-Siklus",
+  IDXCYCLIC: "Kons. Siklus",
+  IDXHEALTH: "Kesehatan",
+  IDXFINANCE: "Keuangan",
+  IDXPROPERT: "Properti & RE",
+  IDXTECHNO: "Teknologi",
+  IDXINFRA: "Infrastruktur",
+  IDXTRANS: "Transportasi",
+};
 
 function computeStaleness(scrapedAt: Date) {
   const ageMs = Date.now() - new Date(scrapedAt).getTime();
@@ -84,6 +103,66 @@ export function createMarketRoute(deps: { db: typeof DbClient }) {
     const staleness = scrapedAtRow[0] ? computeStaleness(scrapedAtRow[0].scrapedAt) : null;
 
     return c.json({ tradeDate: latestDate, gainers, losers, topValue, topVolume, staleness });
+  });
+
+  app.get("/sectors", async (c) => {
+    const latestRows = await deps.db
+      .select({ tradeDate: indexSummary.tradeDate })
+      .from(indexSummary)
+      .where(inArray(indexSummary.indexCode, [...SECTOR_CODES]))
+      .orderBy(desc(indexSummary.tradeDate))
+      .limit(1);
+
+    const latestRow = latestRows[0];
+    if (!latestRow) {
+      return c.json({ tradeDate: null, sectors: [], staleness: null });
+    }
+
+    const latestDate = latestRow.tradeDate;
+
+    const rows = await deps.db
+      .select()
+      .from(indexSummary)
+      .where(
+        and(
+          eq(indexSummary.tradeDate, latestDate),
+          inArray(indexSummary.indexCode, [...SECTOR_CODES]),
+        ),
+      );
+
+    const sectors = rows
+      .map((r) => ({
+        indexCode: r.indexCode,
+        sectorName: SECTOR_NAMES[r.indexCode] ?? r.indexCode,
+        close: r.close,
+        change: r.change,
+        changePct: r.previous && r.previous > 0 && r.change != null
+          ? Math.round((r.change / r.previous) * 100 * 100) / 100
+          : null,
+        numberOfStock: r.numberOfStock,
+      }))
+      .sort((a, b) => {
+        if (a.changePct === null && b.changePct === null) return 0;
+        if (a.changePct === null) return 1;
+        if (b.changePct === null) return -1;
+        return b.changePct - a.changePct;
+      });
+
+    const scrapedAtRow = await deps.db
+      .select({ scrapedAt: indexSummary.scrapedAt })
+      .from(indexSummary)
+      .where(
+        and(
+          eq(indexSummary.tradeDate, latestDate),
+          inArray(indexSummary.indexCode, [...SECTOR_CODES]),
+        ),
+      )
+      .orderBy(desc(indexSummary.scrapedAt))
+      .limit(1);
+
+    const staleness = scrapedAtRow[0] ? computeStaleness(scrapedAtRow[0].scrapedAt) : null;
+
+    return c.json({ tradeDate: latestDate, sectors, staleness });
   });
 
   app.get("/search", async (c) => {

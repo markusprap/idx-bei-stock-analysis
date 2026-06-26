@@ -1,6 +1,7 @@
 import { IhsgSummary } from "../components/market/IhsgSummary";
 import { TrendingStocks } from "../components/market/TrendingStocks";
 import { StockSearch } from "../components/market/StockSearch";
+import { SectorPerformance } from "../components/market/SectorPerformance";
 import "./search.css";
 
 export function SearchRoute() {
@@ -9,8 +10,9 @@ export function SearchRoute() {
       <StockSearch />
       <IhsgSummary />
       <TrendingStocks />
+      <SectorPerformance />
       <section className="search-coming-soon">
-        <p>Data sektor dan berita akan hadir di sini.</p>
+        <p>Berita pasar akan hadir di sini.</p>
       </section>
     </main>
   );
