@@ -96,4 +96,11 @@ describe("/stock/:code route", () => {
     const html = await renderStockDetail();
     expect(html).toContain("Kembali");
   });
+
+  test("renders 'Tanya AI soal saham ini' CTA button with no buy/sell affordance", async () => {
+    const html = await renderStockDetail();
+    expect(html).toContain("stock-detail-cta-btn");
+    expect(html).toContain("Tanya AI soal saham ini");
+    expect(html).not.toMatch(/\b(beli|jual|buy|sell)\b/i);
+  });
 });

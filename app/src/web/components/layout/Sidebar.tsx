@@ -35,7 +35,7 @@ export function Sidebar() {
       <button
         type="button"
         className="sidebar-new-chat"
-        onClick={() => navigate({ to: "/" })}
+        onClick={() => navigate({ to: "/", search: { ticker: undefined } })}
       >
         <ChatBubbleIcon />+ Chat Baru
       </button>

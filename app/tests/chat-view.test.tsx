@@ -55,6 +55,20 @@ describe("AC 3 — index opens to a new/empty Chat even with real persisted hist
   });
 });
 
+describe("ticker chip — context handoff from stock detail (Story 2.7)", () => {
+  test("renders ticker chip and context label when /?ticker=BBCA", async () => {
+    const html = await renderAtPath("/?ticker=BBCA");
+    expect(html).toContain("chat-ticker-chip");
+    expect(html).toContain("BBCA");
+    expect(html).toContain("chat-ticker-context-label");
+  });
+
+  test("does not render ticker context bar when no ticker in URL", async () => {
+    const html = await renderAtPath("/");
+    expect(html).not.toContain("chat-ticker-context");
+  });
+});
+
 describe("Golden Rule — no visual verdict element (AC 2, Story 1.3)", () => {
   test("ChatView markup and styles carry no badge/color/icon tied to a buy/sell/hold verdict", () => {
     const tsx = readFileSync(

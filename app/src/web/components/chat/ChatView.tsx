@@ -39,12 +39,14 @@ async function fetchThreadMessages(threadId: string): Promise<ChatMessage[]> {
 
 type ChatViewProps = {
   threadId: string | null;
+  ticker?: string;
 };
 
-export function ChatView({ threadId }: ChatViewProps) {
+export function ChatView({ threadId, ticker }: ChatViewProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [input, setInput] = useState("");
+  const [contextTicker] = useState(ticker);
+  const [input, setInput] = useState(contextTicker ? `${contextTicker} ` : "");
 
   const threadMessagesQuery = useQuery({
     queryKey: ["thread-messages", threadId],
@@ -81,6 +83,12 @@ export function ChatView({ threadId }: ChatViewProps) {
 
   return (
     <section className="chat-view">
+      {contextTicker && (
+        <div className="chat-ticker-context">
+          <span className="chat-ticker-chip">{contextTicker}</span>
+          <span className="chat-ticker-context-label">Konteks saham</span>
+        </div>
+      )}
       {!showMessages ? (
         <div className="chat-view-empty">
           <ChatBubbleIcon />
