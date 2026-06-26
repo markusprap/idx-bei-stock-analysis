@@ -1,12 +1,14 @@
 import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
 import { createChatRoute } from "./routes/chat";
+import { createMarketRoute } from "./routes/market";
 import { db } from "./db/client";
 import { llm } from "./llm/client";
 
 const app = new Hono();
 
 app.route("/", createChatRoute({ db, llm }));
+app.route("/api/market", createMarketRoute({ db }));
 
 const isProd = process.env.NODE_ENV === "production";
 

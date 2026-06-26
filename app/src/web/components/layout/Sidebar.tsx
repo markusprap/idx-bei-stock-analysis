@@ -41,7 +41,7 @@ export function Sidebar() {
       </button>
 
       <nav className="sidebar-nav">
-        <button type="button" className="sidebar-nav-pill" disabled>
+        <button type="button" className="sidebar-nav-pill" onClick={() => navigate({ to: "/search" })}>
           <SearchMagnifierIcon />
           Search
         </button>
