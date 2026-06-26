@@ -57,6 +57,9 @@ jobs:
       - name: Apply daily_trade_summary migration
         run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0002_classy_catseye.sql
 
+      - name: Apply market_news migration
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0003_aromatic_talkback.sql
+
       - run: bun run lint
 
       - run: bun run typecheck

@@ -1,4 +1,4 @@
-import { pgTable, text, date, doublePrecision, integer, timestamp, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, date, doublePrecision, integer, boolean, timestamp, primaryKey } from "drizzle-orm/pg-core";
 
 export const indexSummary = pgTable(
   "index_summary",
@@ -44,3 +44,16 @@ export const dailyTradeSummary = pgTable(
 );
 
 export type DailyTradeSummaryRow = typeof dailyTradeSummary.$inferSelect;
+
+export const marketNews = pgTable("market_news", {
+  newsId: integer("news_id").primaryKey(),
+  publishedDate: timestamp("published_date", { withTimezone: false }),
+  title: text("title"),
+  summary: text("summary"),
+  tags: text("tags"),
+  imageUrl: text("image_url"),
+  isHeadline: boolean("is_headline").default(false),
+  scrapedAt: timestamp("scraped_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type MarketNewsRow = typeof marketNews.$inferSelect;
