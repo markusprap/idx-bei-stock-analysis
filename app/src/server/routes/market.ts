@@ -1,7 +1,10 @@
 import { Hono } from "hono";
-import { desc, asc, eq, isNotNull, and, sql } from "drizzle-orm";
+import { desc, asc, eq, isNotNull, and, or, ilike, sql } from "drizzle-orm";
 import type { db as DbClient } from "../db/client";
 import { indexSummary, dailyTradeSummary } from "../db/market-schema";
+import { financialRatios } from "../db/schema";
+
+const SEARCH_LIMIT = 20;
 
 const IHSG_CODE = "COMPOSITE";
 const CHART_LIMIT = 30;
@@ -81,6 +84,28 @@ export function createMarketRoute(deps: { db: typeof DbClient }) {
     const staleness = scrapedAtRow[0] ? computeStaleness(scrapedAtRow[0].scrapedAt) : null;
 
     return c.json({ tradeDate: latestDate, gainers, losers, topValue, topVolume, staleness });
+  });
+
+  app.get("/search", async (c) => {
+    const q = c.req.query("q")?.trim() ?? "";
+    if (!q) return c.json({ results: [], query: "" });
+
+    const results = await deps.db
+      .selectDistinct({ code: financialRatios.code, stockName: financialRatios.stockName })
+      .from(financialRatios)
+      .where(
+        and(
+          sql`length(${financialRatios.code}) = 4`,
+          or(
+            ilike(financialRatios.code, `%${q}%`),
+            ilike(financialRatios.stockName, `%${q}%`),
+          ),
+        ),
+      )
+      .orderBy(financialRatios.code)
+      .limit(SEARCH_LIMIT);
+
+    return c.json({ results, query: q });
   });
 
   return app;

@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { ChatRoute } from "./routes/chat";
 import { SearchRoute } from "./routes/search";
+import { StockDetailRoute } from "./routes/stock-detail";
 
 const rootRoute = createRootRoute();
 
@@ -22,7 +23,13 @@ export const searchRoute = createRoute({
   component: SearchRoute,
 });
 
-export const routeTree = rootRoute.addChildren([indexRoute, chatThreadRoute, searchRoute]);
+export const stockDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/stock/$code",
+  component: StockDetailRoute,
+});
+
+export const routeTree = rootRoute.addChildren([indexRoute, chatThreadRoute, searchRoute, stockDetailRoute]);
 
 export const router = createRouter({ routeTree });
 
