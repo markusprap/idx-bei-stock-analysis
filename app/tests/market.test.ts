@@ -192,6 +192,105 @@ describe("GET /trending", () => {
   });
 });
 
+describe("GET /sectors", () => {
+  function makeSectorRow(indexCode: string, change: number, previous: number, overrides: Partial<typeof indexSummary.$inferInsert> = {}) {
+    return makeRow({
+      indexCode,
+      close: previous + change,
+      change,
+      previous,
+      tradeDate: "2026-06-25",
+      ...overrides,
+    });
+  }
+
+  test("returns empty state when table is empty", async () => {
+    const res = await app.request("/sectors");
+    expect(res.status).toBe(200);
+    const body = await res.json() as { tradeDate: unknown; sectors: unknown[]; staleness: unknown };
+    expect(body.tradeDate).toBeNull();
+    expect(body.sectors).toEqual([]);
+    expect(body.staleness).toBeNull();
+  });
+
+  test("returns sectors sorted by changePct DESC", async () => {
+    await db.insert(indexSummary).values([
+      makeSectorRow("IDXFINANCE", 10, 1000),
+      makeSectorRow("IDXENERGY", 50, 1000),
+      makeSectorRow("IDXTECHNO", -20, 1000),
+    ]);
+
+    const res = await app.request("/sectors");
+    const body = await res.json() as { sectors: { indexCode: string; changePct: number }[] };
+    expect(body.sectors[0]?.indexCode).toBe("IDXENERGY");
+    expect(body.sectors[1]?.indexCode).toBe("IDXFINANCE");
+    expect(body.sectors[2]?.indexCode).toBe("IDXTECHNO");
+  });
+
+  test("excludes non-sector index codes (COMPOSITE, LQ45, etc.)", async () => {
+    await db.insert(indexSummary).values([
+      makeSectorRow("IDXFINANCE", 10, 1000),
+      makeRow({ indexCode: "COMPOSITE", tradeDate: "2026-06-25" }),
+      makeRow({ indexCode: "LQ45", tradeDate: "2026-06-25" }),
+    ]);
+
+    const res = await app.request("/sectors");
+    const body = await res.json() as { sectors: { indexCode: string }[] };
+    const codes = body.sectors.map((s) => s.indexCode);
+    expect(codes).toContain("IDXFINANCE");
+    expect(codes).not.toContain("COMPOSITE");
+    expect(codes).not.toContain("LQ45");
+  });
+
+  test("computes changePct correctly from change/previous", async () => {
+    await db.insert(indexSummary).values([
+      makeSectorRow("IDXFINANCE", 10, 200),
+    ]);
+
+    const res = await app.request("/sectors");
+    const body = await res.json() as { sectors: { indexCode: string; changePct: number }[] };
+    const sector = body.sectors.find((s) => s.indexCode === "IDXFINANCE");
+    expect(sector?.changePct).toBeCloseTo(5.0, 1);
+  });
+
+  test("changePct is null when previous is zero", async () => {
+    await db.insert(indexSummary).values([
+      makeSectorRow("IDXFINANCE", 10, 0),
+    ]);
+
+    const res = await app.request("/sectors");
+    const body = await res.json() as { sectors: { indexCode: string; changePct: number | null }[] };
+    const sector = body.sectors.find((s) => s.indexCode === "IDXFINANCE");
+    expect(sector?.changePct).toBeNull();
+  });
+
+  test("staleness reflects time since scraped_at", async () => {
+    const oldScrapedAt = new Date(Date.now() - 26 * 60 * 60 * 1000);
+    await db.insert(indexSummary).values([
+      { ...makeSectorRow("IDXFINANCE", 10, 1000), scrapedAt: oldScrapedAt },
+    ]);
+
+    const res = await app.request("/sectors");
+    const body = await res.json() as { staleness: { ageHours: number; isStale: boolean } };
+    expect(body.staleness.isStale).toBe(true);
+    expect(body.staleness.ageHours).toBeGreaterThan(24);
+  });
+
+  test("uses latest tradeDate only", async () => {
+    await db.insert(indexSummary).values([
+      makeSectorRow("IDXFINANCE", 10, 1000, { tradeDate: "2026-06-24" }),
+      makeSectorRow("IDXFINANCE", 50, 1000, { tradeDate: "2026-06-25" }),
+    ]);
+
+    const res = await app.request("/sectors");
+    const body = await res.json() as { tradeDate: string; sectors: { indexCode: string; changePct: number }[] };
+    expect(body.tradeDate).toBe("2026-06-25");
+    expect(body.sectors).toHaveLength(1);
+    const sector = body.sectors[0];
+    expect(sector?.changePct).toBeCloseTo(5.0, 1);
+  });
+});
+
 describe("GET /search", () => {
   test("returns empty results for empty query", async () => {
     const res = await app.request("/search?q=");

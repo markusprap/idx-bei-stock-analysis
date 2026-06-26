@@ -25,14 +25,24 @@ const MOCK_IHSG_RESPONSE = {
   },
 };
 
+const MOCK_SECTORS_RESPONSE = {
+  tradeDate: null,
+  sectors: [],
+  staleness: null,
+};
+
 async function renderSearch(
   mockIhsg: unknown = MOCK_IHSG_RESPONSE,
   mockTrending: unknown = { tradeDate: null, gainers: [], losers: [], topValue: [], topVolume: [], staleness: null },
+  mockSectors: unknown = MOCK_SECTORS_RESPONSE,
 ): Promise<string> {
   global.fetch = mock(async (url: RequestInfo | URL) => {
     const urlStr = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
     if (urlStr.includes("/trending")) {
       return new Response(JSON.stringify(mockTrending), { status: 200 });
+    }
+    if (urlStr.includes("/sectors")) {
+      return new Response(JSON.stringify(mockSectors), { status: 200 });
     }
     return new Response(JSON.stringify(mockIhsg), { status: 200 });
   }) as unknown as typeof fetch;
@@ -87,5 +97,11 @@ describe("/search route", () => {
     const html = await renderSearch();
     expect(html).toContain("stock-search");
     expect(html).toContain("Cari saham");
+  });
+
+  test("renders SectorPerformance section on the search page", async () => {
+    const html = await renderSearch();
+    expect(html).toContain("sector-performance");
+    expect(html).toContain("Performa Sektor");
   });
 });
