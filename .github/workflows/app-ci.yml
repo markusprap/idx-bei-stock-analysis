@@ -54,6 +54,9 @@ jobs:
       - name: Apply index_summary migration
         run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0001_worried_mathemanic.sql
 
+      - name: Apply daily_trade_summary migration
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0002_classy_catseye.sql
+
       - run: bun run lint
 
       - run: bun run typecheck

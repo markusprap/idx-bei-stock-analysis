@@ -1,11 +1,22 @@
 import { Hono } from "hono";
-import { desc, eq } from "drizzle-orm";
+import { desc, asc, eq, isNotNull, and, sql } from "drizzle-orm";
 import type { db as DbClient } from "../db/client";
-import { indexSummary } from "../db/market-schema";
+import { indexSummary, dailyTradeSummary } from "../db/market-schema";
 
 const IHSG_CODE = "COMPOSITE";
 const CHART_LIMIT = 30;
+const TRENDING_LIMIT = 10;
 const STALENESS_THRESHOLD_HOURS = 24;
+
+function computeStaleness(scrapedAt: Date) {
+  const ageMs = Date.now() - new Date(scrapedAt).getTime();
+  const ageHours = ageMs / (1000 * 60 * 60);
+  return {
+    scrapedAt,
+    ageHours: Math.round(ageHours * 10) / 10,
+    isStale: ageHours > STALENESS_THRESHOLD_HOURS,
+  };
+}
 
 export function createMarketRoute(deps: { db: typeof DbClient }) {
   const app = new Hono();
@@ -24,18 +35,52 @@ export function createMarketRoute(deps: { db: typeof DbClient }) {
 
     const mostRecentRow = rows[0];
     if (!mostRecentRow) return c.json({ data: [], staleness: null });
-    const mostRecentScrapedAt = mostRecentRow.scrapedAt;
-    const ageMs = Date.now() - new Date(mostRecentScrapedAt).getTime();
-    const ageHours = ageMs / (1000 * 60 * 60);
 
     return c.json({
       data: rows,
-      staleness: {
-        scrapedAt: mostRecentScrapedAt,
-        ageHours: Math.round(ageHours * 10) / 10,
-        isStale: ageHours > STALENESS_THRESHOLD_HOURS,
-      },
+      staleness: computeStaleness(mostRecentRow.scrapedAt),
     });
+  });
+
+  app.get("/trending", async (c) => {
+    const latestRows = await deps.db
+      .select({ tradeDate: dailyTradeSummary.tradeDate })
+      .from(dailyTradeSummary)
+      .orderBy(desc(dailyTradeSummary.tradeDate))
+      .limit(1);
+
+    const latestRow = latestRows[0];
+    if (!latestRow) {
+      return c.json({ tradeDate: null, gainers: [], losers: [], topValue: [], topVolume: [], staleness: null });
+    }
+
+    const latestDate = latestRow.tradeDate;
+
+    const activeStocks = and(
+      eq(dailyTradeSummary.tradeDate, latestDate),
+      isNotNull(dailyTradeSummary.close),
+      sql`${dailyTradeSummary.close} > 0`,
+    );
+
+    const activeWithChangePct = and(activeStocks, isNotNull(dailyTradeSummary.changePct));
+
+    const [gainers, losers, topValue, topVolume] = await Promise.all([
+      deps.db.select().from(dailyTradeSummary).where(activeWithChangePct).orderBy(desc(dailyTradeSummary.changePct)).limit(TRENDING_LIMIT),
+      deps.db.select().from(dailyTradeSummary).where(activeWithChangePct).orderBy(asc(dailyTradeSummary.changePct)).limit(TRENDING_LIMIT),
+      deps.db.select().from(dailyTradeSummary).where(activeStocks).orderBy(desc(dailyTradeSummary.value)).limit(TRENDING_LIMIT),
+      deps.db.select().from(dailyTradeSummary).where(activeStocks).orderBy(desc(dailyTradeSummary.volume)).limit(TRENDING_LIMIT),
+    ]);
+
+    const scrapedAtRow = await deps.db
+      .select({ scrapedAt: dailyTradeSummary.scrapedAt })
+      .from(dailyTradeSummary)
+      .where(eq(dailyTradeSummary.tradeDate, latestDate))
+      .orderBy(desc(dailyTradeSummary.scrapedAt))
+      .limit(1);
+
+    const staleness = scrapedAtRow[0] ? computeStaleness(scrapedAtRow[0].scrapedAt) : null;
+
+    return c.json({ tradeDate: latestDate, gainers, losers, topValue, topVolume, staleness });
   });
 
   return app;

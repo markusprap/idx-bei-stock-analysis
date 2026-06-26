@@ -21,3 +21,26 @@ export const indexSummary = pgTable(
 );
 
 export type IndexSummaryRow = typeof indexSummary.$inferSelect;
+
+export const dailyTradeSummary = pgTable(
+  "daily_trade_summary",
+  {
+    stockCode: text("stock_code").notNull(),
+    tradeDate: date("trade_date").notNull(),
+    stockName: text("stock_name"),
+    previous: doublePrecision("previous"),
+    openPrice: doublePrecision("open_price"),
+    high: doublePrecision("high"),
+    low: doublePrecision("low"),
+    close: doublePrecision("close"),
+    change: doublePrecision("change"),
+    changePct: doublePrecision("change_pct"),
+    volume: doublePrecision("volume"),
+    value: doublePrecision("value"),
+    frequency: doublePrecision("frequency"),
+    scrapedAt: timestamp("scraped_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.stockCode, table.tradeDate] })],
+);
+
+export type DailyTradeSummaryRow = typeof dailyTradeSummary.$inferSelect;
