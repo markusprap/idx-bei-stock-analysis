@@ -1,25 +1,42 @@
 :root {
   --color-canvas: #fbf7f0;
   --color-text: #2b2620;
+  --color-text-secondary: #6b7280;
 
   --color-accent-1: #2f5d4f;
   --color-accent-2: #3e7a5c;
   --color-accent-3: #9fc2ae;
   --color-accent-4: #eaf2ec;
 
+  --color-surface: #fff;
+  --color-border: #e5e7eb;
+  --color-muted-bg: #f3f4f6;
+  --color-muted: #9ca3af;
+
   --font-heading: "Fraunces", serif;
   --font-body: "Inter", sans-serif;
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
+html,
 body {
+  height: 100%;
   margin: 0;
+}
+
+body {
   background: var(--color-canvas);
   color: var(--color-text);
   font-family: var(--font-body);
+}
+
+#root {
+  height: 100%;
 }
 
 h1,

@@ -1,6 +1,8 @@
 .stock-detail-page {
   padding: 1.5rem;
-  max-width: 720px;
+  max-width: 760px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 /* Header */

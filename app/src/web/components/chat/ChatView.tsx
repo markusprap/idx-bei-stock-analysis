@@ -115,18 +115,20 @@ export function ChatView({ threadId, ticker }: ChatViewProps) {
         </div>
       )}
 
-      <form className="chat-view-input-bar" onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="Tanya soal saham..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          disabled={mutation.isPending}
-        />
-        <button type="submit" disabled={mutation.isPending || !input.trim()}>
-          Kirim
-        </button>
-      </form>
+      <div className="chat-view-input-wrap">
+        <form className="chat-view-input-bar" onSubmit={handleSubmit}>
+          <input
+            type="text"
+            placeholder="Tanya soal saham..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={mutation.isPending}
+          />
+          <button type="submit" disabled={mutation.isPending || !input.trim()}>
+            Kirim
+          </button>
+        </form>
+      </div>
 
       <p className="chat-view-footer-note">
         Sahamigo menyajikan data, bukan rekomendasi — keputusan tetap di tangan lo.
