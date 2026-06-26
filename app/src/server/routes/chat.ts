@@ -7,6 +7,32 @@ import { CHAT_MODEL } from "../llm/client";
 import { containsGoldenRuleViolation, buildSafeFallbackReply } from "../golden-rule/guard";
 import { createThread, appendMessage, listThreads, listMessages, isValidThreadId } from "./chat-history";
 
+export type TextReply = { type: "text"; message: string };
+
+export type FundamentalCardReply = {
+  type: "fundamental_card";
+  ticker: string;
+  stockName: string | null;
+  sector: string | null;
+  subSector: string | null;
+  sharia: string | null;
+  fsDate: string | null;
+  fiscalYearEnd: string | null;
+  per: number | null;
+  priceBv: number | null;
+  eps: number | null;
+  bookValue: number | null;
+  roe: number | null;
+  roa: number | null;
+  npm: number | null;
+  deRatio: number | null;
+  assets: number | null;
+  liabilities: number | null;
+  equity: number | null;
+};
+
+export type ChatReply = TextReply | FundamentalCardReply;
+
 const TICKER_PATTERN = /\b[A-Z]{4}\b/;
 const PRICE_OR_TECHNICAL_PATTERN =
   /harga|price|grafik|\bchart\b|ohlc|volume|\brsi\b|macd|bollinger|stochastic|teknikal|technical/i;
@@ -81,24 +107,45 @@ async function callLlmGuarded(
   return reply;
 }
 
-export async function handleChatMessage(message: string, deps: ChatDeps): Promise<string> {
+export async function handleChatMessage(message: string, deps: ChatDeps): Promise<ChatReply> {
   if (asksAboutPriceOrTechnicalData(message)) {
-    return NO_PRICE_DATA_REPLY;
+    return { type: "text", message: NO_PRICE_DATA_REPLY };
   }
 
   const ticker = extractTicker(message);
   if (!ticker) {
-    return callLlmGuarded(deps, buildChitchatSystemPrompt(), message, null);
+    const msg = await callLlmGuarded(deps, buildChitchatSystemPrompt(), message, null);
+    return { type: "text", message: msg };
   }
 
   const rows = await deps.db.select().from(financialRatios).where(eq(financialRatios.code, ticker));
   const row = rows[0];
 
   if (!row) {
-    return noDataReply(ticker);
+    return { type: "text", message: noDataReply(ticker) };
   }
 
-  return callLlmGuarded(deps, buildSystemPrompt(row), message, row);
+  return {
+    type: "fundamental_card",
+    ticker: row.code ?? ticker,
+    stockName: row.stockName ?? null,
+    sector: row.sector ?? null,
+    subSector: row.subSector ?? null,
+    sharia: row.sharia ?? null,
+    fsDate: row.fsDate ?? null,
+    fiscalYearEnd: row.fiscalYearEnd ?? null,
+    per: row.per ?? null,
+    priceBv: row.priceBv ?? null,
+    eps: row.eps ?? null,
+    bookValue: row.bookValue ?? null,
+    roe: row.roe ?? null,
+    roa: row.roa ?? null,
+    npm: row.npm ?? null,
+    deRatio: row.deRatio ?? null,
+    assets: row.assets ?? null,
+    liabilities: row.liabilities ?? null,
+    equity: row.equity ?? null,
+  };
 }
 
 export function createChatRoute(deps: ChatDeps) {
@@ -120,7 +167,7 @@ export function createChatRoute(deps: ChatDeps) {
 
     await appendMessage(deps.db, threadId, "user", message);
     const reply = await handleChatMessage(message, deps);
-    await appendMessage(deps.db, threadId, "assistant", reply);
+    await appendMessage(deps.db, threadId, "assistant", JSON.stringify(reply));
 
     return c.json({ threadId, reply });
   });
