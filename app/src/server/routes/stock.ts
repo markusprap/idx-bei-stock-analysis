@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { desc, asc, eq, and, gte } from "drizzle-orm";
+import { desc, asc, eq, and, gte, sql } from "drizzle-orm";
 import type { db as DbClient } from "../db/client";
-import { dailyTradeSummary } from "../db/market-schema";
+import { dailyTradeSummary, brokerTransactions } from "../db/market-schema";
 import { financialRatios } from "../db/schema";
 import { computeIndicators } from "../lib/indicators";
 
@@ -127,6 +127,50 @@ export function createStockRoute(deps: { db: typeof DbClient }) {
         netFlow: r.foreignBuy !== null && r.foreignSell !== null
           ? r.foreignBuy - r.foreignSell
           : null,
+      })),
+      staleness,
+    });
+  });
+
+  app.get("/:code/brokers", async (c) => {
+    const code = c.req.param("code").toUpperCase();
+
+    const latestDateRows = await deps.db
+      .select({ tradeDate: brokerTransactions.tradeDate })
+      .from(brokerTransactions)
+      .where(eq(brokerTransactions.stockCode, code))
+      .orderBy(desc(brokerTransactions.tradeDate))
+      .limit(1);
+
+    const latestDate = latestDateRows[0]?.tradeDate ?? null;
+    if (!latestDate) {
+      return c.json({ code, tradeDate: null, brokers: [], staleness: null });
+    }
+
+    const rows = await deps.db
+      .select()
+      .from(brokerTransactions)
+      .where(
+        and(
+          eq(brokerTransactions.stockCode, code),
+          eq(brokerTransactions.tradeDate, latestDate),
+        ),
+      )
+      .orderBy(sql`${brokerTransactions.buyValue} DESC NULLS LAST`);
+
+    const staleness = rows[0] ? computeStaleness(rows[0].scrapedAt) : null;
+
+    return c.json({
+      code,
+      tradeDate: latestDate,
+      brokers: rows.map((r) => ({
+        brokerCode: r.brokerCode,
+        brokerName: r.brokerName,
+        buyVolume: r.buyVolume,
+        buyValue: r.buyValue,
+        sellVolume: r.sellVolume,
+        sellValue: r.sellValue,
+        netValue: r.buyValue !== null && r.sellValue !== null ? r.buyValue - r.sellValue : null,
       })),
       staleness,
     });

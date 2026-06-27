@@ -47,6 +47,24 @@ export const dailyTradeSummary = pgTable(
 
 export type DailyTradeSummaryRow = typeof dailyTradeSummary.$inferSelect;
 
+export const brokerTransactions = pgTable(
+  "broker_transactions",
+  {
+    stockCode: text("stock_code").notNull(),
+    tradeDate: date("trade_date").notNull(),
+    brokerCode: text("broker_code").notNull(),
+    brokerName: text("broker_name"),
+    buyVolume: doublePrecision("buy_volume"),
+    buyValue: doublePrecision("buy_value"),
+    sellVolume: doublePrecision("sell_volume"),
+    sellValue: doublePrecision("sell_value"),
+    scrapedAt: timestamp("scraped_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.stockCode, table.tradeDate, table.brokerCode] })],
+);
+
+export type BrokerTransactionRow = typeof brokerTransactions.$inferSelect;
+
 export const marketNews = pgTable("market_news", {
   newsId: integer("news_id").primaryKey(),
   publishedDate: timestamp("published_date", { withTimezone: false }),

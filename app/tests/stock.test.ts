@@ -1,7 +1,7 @@
 import { describe, expect, test, beforeEach, afterAll } from "bun:test";
-import { eq, or } from "drizzle-orm";
+import { eq, or, inArray } from "drizzle-orm";
 import { db } from "../src/server/db/client";
-import { dailyTradeSummary } from "../src/server/db/market-schema";
+import { dailyTradeSummary, brokerTransactions } from "../src/server/db/market-schema";
 import { financialRatios } from "../src/server/db/schema";
 import { createStockRoute } from "../src/server/routes/stock";
 
@@ -51,11 +51,14 @@ function makeFundamentalsRow(overrides: Partial<typeof financialRatios.$inferIns
   };
 }
 
+const BROKER_CODES = ["BRKX", "BRKY"];
+
 beforeEach(async () => {
   await db.delete(dailyTradeSummary);
   await db.delete(financialRatios).where(
     or(eq(financialRatios.code, FUND_CODE), eq(financialRatios.code, FUND_CODE_2)),
   );
+  await db.delete(brokerTransactions).where(inArray(brokerTransactions.stockCode, BROKER_CODES));
 });
 
 afterAll(async () => {
@@ -63,6 +66,7 @@ afterAll(async () => {
   await db.delete(financialRatios).where(
     or(eq(financialRatios.code, FUND_CODE), eq(financialRatios.code, FUND_CODE_2)),
   );
+  await db.delete(brokerTransactions).where(inArray(brokerTransactions.stockCode, BROKER_CODES));
 });
 
 describe("GET /:code/chart", () => {
@@ -214,6 +218,98 @@ describe("GET /:code/foreign-flow", () => {
     const body = await res.json() as { staleness: { ageHours: number; isStale: boolean } };
     expect(body.staleness.isStale).toBe(true);
     expect(body.staleness.ageHours).toBeGreaterThan(24);
+  });
+});
+
+describe("GET /:code/brokers", () => {
+  function makeBrokerRow(overrides: Partial<typeof brokerTransactions.$inferInsert> = {}) {
+    return {
+      stockCode: BROKER_CODES[0],
+      tradeDate: "2026-06-25",
+      brokerCode: "BK",
+      brokerName: "Broker Keren",
+      buyVolume: 1_000_000,
+      buyValue: 9_000_000_000,
+      sellVolume: 500_000,
+      sellValue: 4_500_000_000,
+      ...overrides,
+    };
+  }
+
+  test("returns empty state when table is empty", async () => {
+    const res = await app.request(`/${BROKER_CODES[0]}/brokers`);
+    expect(res.status).toBe(200);
+    const body = await res.json() as { code: string; tradeDate: null; brokers: unknown[] };
+    expect(body.code).toBe(BROKER_CODES[0]);
+    expect(body.tradeDate).toBeNull();
+    expect(body.brokers).toEqual([]);
+  });
+
+  test("returns latest tradeDate only", async () => {
+    await db.insert(brokerTransactions).values([
+      makeBrokerRow({ tradeDate: "2026-06-24", buyValue: 1e9 }),
+      makeBrokerRow({ tradeDate: "2026-06-25", buyValue: 2e9 }),
+    ]);
+
+    const res = await app.request(`/${BROKER_CODES[0]}/brokers`);
+    const body = await res.json() as { tradeDate: string; brokers: unknown[] };
+    expect(body.tradeDate).toBe("2026-06-25");
+    expect(body.brokers).toHaveLength(1);
+  });
+
+  test("computes netValue = buyValue - sellValue", async () => {
+    await db.insert(brokerTransactions).values([makeBrokerRow()]);
+
+    const res = await app.request(`/${BROKER_CODES[0]}/brokers`);
+    const body = await res.json() as { brokers: { netValue: number }[] };
+    const broker = body.brokers[0];
+    expect(broker?.netValue).toBeCloseTo(4_500_000_000, 0);
+  });
+
+  test("orders brokers by buyValue DESC", async () => {
+    await db.insert(brokerTransactions).values([
+      makeBrokerRow({ brokerCode: "AA", buyValue: 1e9 }),
+      makeBrokerRow({ brokerCode: "BB", buyValue: 5e9 }),
+      makeBrokerRow({ brokerCode: "CC", buyValue: 3e9 }),
+    ]);
+
+    const res = await app.request(`/${BROKER_CODES[0]}/brokers`);
+    const body = await res.json() as { brokers: { brokerCode: string }[] };
+    expect(body.brokers[0]?.brokerCode).toBe("BB");
+    expect(body.brokers[1]?.brokerCode).toBe("CC");
+    expect(body.brokers[2]?.brokerCode).toBe("AA");
+  });
+
+  test("normalizes code to uppercase", async () => {
+    const res = await app.request(`/${BROKER_CODES[0].toLowerCase()}/brokers`);
+    const body = await res.json() as { code: string };
+    expect(body.code).toBe(BROKER_CODES[0]);
+  });
+
+  test("returns null netValue when buyValue is null", async () => {
+    await db.insert(brokerTransactions).values([makeBrokerRow({ brokerCode: "NA", buyValue: null })]);
+    const res = await app.request(`/${BROKER_CODES[0]}/brokers`);
+    const body = await res.json() as { brokers: { netValue: unknown }[] };
+    expect(body.brokers[0]?.netValue).toBeNull();
+  });
+
+  test("null buyValue broker sorts after brokers with data", async () => {
+    await db.insert(brokerTransactions).values([
+      makeBrokerRow({ brokerCode: "HAS", buyValue: 1e9 }),
+      makeBrokerRow({ brokerCode: "NULL", buyValue: null }),
+    ]);
+    const res = await app.request(`/${BROKER_CODES[0]}/brokers`);
+    const body = await res.json() as { brokers: { brokerCode: string }[] };
+    expect(body.brokers[0]?.brokerCode).toBe("HAS");
+    expect(body.brokers[1]?.brokerCode).toBe("NULL");
+  });
+
+  test("staleness is present when data exists", async () => {
+    await db.insert(brokerTransactions).values([makeBrokerRow()]);
+    const res = await app.request(`/${BROKER_CODES[0]}/brokers`);
+    const body = await res.json() as { staleness: { ageHours: number; isStale: boolean } };
+    expect(body.staleness).not.toBeNull();
+    expect(typeof body.staleness.ageHours).toBe("number");
   });
 });
 

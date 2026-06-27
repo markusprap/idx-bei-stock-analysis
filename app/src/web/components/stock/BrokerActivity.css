@@ -1,0 +1,133 @@
+.ba-section {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  margin-top: 1rem;
+}
+
+.ba-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.ba-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text, #111827);
+  margin: 0;
+}
+
+.ba-badges {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+}
+
+.ba-badge-eod {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: var(--color-muted-bg, #f3f4f6);
+  color: var(--color-text-secondary, #6b7280);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+.ba-badge-date {
+  font-size: 0.625rem;
+  font-weight: 600;
+  background: var(--color-muted-bg, #f3f4f6);
+  color: var(--color-text-secondary, #6b7280);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+.ba-badge-stale {
+  font-size: 0.625rem;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #b45309;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.25rem;
+}
+
+.ba-state {
+  color: var(--color-text-secondary, #6b7280);
+  font-size: 0.875rem;
+}
+
+.ba-table-wrap {
+  overflow-x: auto;
+}
+
+.ba-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.ba-table th {
+  text-align: right;
+  font-weight: 600;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-secondary, #6b7280);
+  padding: 0.25rem 0.5rem 0.5rem;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.ba-table th:first-child {
+  text-align: left;
+}
+
+.ba-table td {
+  text-align: right;
+  padding: 0.35rem 0.5rem;
+  font-variant-numeric: tabular-nums;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.ba-table tr:last-child td {
+  border-bottom: none;
+}
+
+.ba-broker {
+  text-align: left !important;
+  display: flex;
+  flex-direction: column;
+  gap: 0.0625rem;
+}
+
+.ba-broker-code {
+  font-weight: 600;
+  color: var(--color-text, #111827);
+}
+
+.ba-broker-name {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.ba-buy,
+.ba-sell {
+  color: var(--color-text, #111827);
+}
+
+.ba-net {
+  font-weight: 600;
+}
+
+.ba-disclaimer {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #6b7280);
+  font-style: italic;
+  margin: 0.875rem 0 0;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}
