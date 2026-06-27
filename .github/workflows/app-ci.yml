@@ -63,6 +63,9 @@ jobs:
       - name: Apply foreign_buy/foreign_sell migration
         run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0004_bitter_lyja.sql
 
+      - name: Apply broker_transactions migration
+        run: PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -f drizzle/0005_broker_transactions.sql
+
       - run: bun run lint
 
       - run: bun run typecheck

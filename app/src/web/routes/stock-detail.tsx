@@ -5,6 +5,7 @@ import { PriceChart } from "../components/stock/PriceChart";
 import { FundamentalsTable } from "../components/stock/FundamentalsTable";
 import { TechnicalIndicators } from "../components/stock/TechnicalIndicators";
 import { ForeignFlow } from "../components/stock/ForeignFlow";
+import { BrokerActivity } from "../components/stock/BrokerActivity";
 import "./stock-detail.css";
 
 type ChartResponse = {
@@ -58,6 +59,7 @@ export function StockDetailRoute() {
         <TechnicalIndicators code={code} />
         <FundamentalsTable code={code} />
         <ForeignFlow code={code} />
+        <BrokerActivity code={code} />
 
         <div className="stock-detail-cta-wrap">
           <button type="button" className="stock-detail-cta-btn" onClick={handleAskAI}>
