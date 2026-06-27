@@ -88,6 +88,50 @@ export function createStockRoute(deps: { db: typeof DbClient }) {
     return c.json({ code, indicators, staleness });
   });
 
+  app.get("/:code/foreign-flow", async (c) => {
+    const code = c.req.param("code").toUpperCase();
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    const cutoffDate = cutoff.toISOString().slice(0, 10);
+
+    const rows = await deps.db
+      .select({
+        tradeDate: dailyTradeSummary.tradeDate,
+        foreignBuy: dailyTradeSummary.foreignBuy,
+        foreignSell: dailyTradeSummary.foreignSell,
+        scrapedAt: dailyTradeSummary.scrapedAt,
+      })
+      .from(dailyTradeSummary)
+      .where(
+        and(
+          eq(dailyTradeSummary.stockCode, code),
+          gte(dailyTradeSummary.tradeDate, cutoffDate),
+        ),
+      )
+      .orderBy(asc(dailyTradeSummary.tradeDate));
+
+    if (rows.length === 0) {
+      return c.json({ code, data: [], staleness: null });
+    }
+
+    const latestRow = rows[rows.length - 1];
+    const staleness = latestRow ? computeStaleness(latestRow.scrapedAt) : null;
+
+    return c.json({
+      code,
+      data: rows.map((r) => ({
+        tradeDate: r.tradeDate,
+        foreignBuy: r.foreignBuy,
+        foreignSell: r.foreignSell,
+        netFlow: r.foreignBuy !== null && r.foreignSell !== null
+          ? r.foreignBuy - r.foreignSell
+          : null,
+      })),
+      staleness,
+    });
+  });
+
   app.get("/:code/fundamentals", async (c) => {
     const code = c.req.param("code").toUpperCase();
 
