@@ -1,11 +1,12 @@
 import { Hono } from "hono";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
 import type { db as DbClient } from "../db/client";
 import { financialRatios, type FinancialRatioRow } from "../db/schema";
 import { dailyTradeSummary } from "../db/market-schema";
 import type { llm as LlmClient } from "../llm/client";
 import { CHAT_MODEL } from "../llm/client";
 import { containsGoldenRuleViolation, buildSafeFallbackReply } from "../golden-rule/guard";
+import { computeIndicators } from "../lib/indicators";
 import { createThread, appendMessage, listThreads, listMessages, isValidThreadId } from "./chat-history";
 
 export type TextReply = { type: "text"; message: string };
@@ -41,14 +42,31 @@ export type FundamentalCardReply = {
   foreignSell: number | null;
 };
 
-export type ChatReply = TextReply | FundamentalCardReply;
+export type IndicatorCardReply = {
+  type: "indicator_card";
+  ticker: string;
+  stockName: string | null;
+  tradeDate: string | null;
+  rsi14: number | null;
+  macd: number | null;
+  macdSignal: number | null;
+  macdHistogram: number | null;
+  ma20: number | null;
+  ma50: number | null;
+  bbUpper: number | null;
+  bbMiddle: number | null;
+  bbLower: number | null;
+  atr14: number | null;
+};
+
+export type ChatReply = TextReply | FundamentalCardReply | IndicatorCardReply;
 
 const TICKER_PATTERN = /\b[A-Z]{4}\b/;
-const PRICE_OR_TECHNICAL_PATTERN =
-  /grafik|\bchart\b|\brsi\b|macd|bollinger|stochastic|teknikal|technical/i;
+const CHART_PATTERN = /grafik|\bchart\b/i;
+const INDICATOR_PATTERN = /\brsi\b|macd|bollinger|stochastic|\batr\b|moving.average|\bma\b\s*\d+|indikator|teknikal|technical/i;
 
-const NO_PRICE_DATA_REPLY =
-  "Sahamigo belum punya grafik atau indikator teknikal (RSI, MACD, Bollinger Bands, dsb) — fitur ini akan hadir segera. Untuk sekarang, coba tanya soal harga, valuasi, atau fundamental sahamnya, ya.";
+const NO_CHART_REPLY =
+  "Sahamigo belum punya fitur grafik/chart interaktif — itu akan hadir segera. Untuk sekarang, coba tanya soal harga, indikator teknikal, valuasi, atau fundamental sahamnya, ya.";
 
 const GOLDEN_RULE_INSTRUCTIONS = [
   "ATURAN WAJIB (Golden Rule, tidak bisa dinegosiasi):",
@@ -65,7 +83,11 @@ export function extractTicker(message: string): string | null {
 }
 
 export function asksAboutPriceOrTechnicalData(message: string): boolean {
-  return PRICE_OR_TECHNICAL_PATTERN.test(message);
+  return CHART_PATTERN.test(message);
+}
+
+export function asksAboutIndicators(message: string): boolean {
+  return INDICATOR_PATTERN.test(message);
 }
 
 export function noDataReply(ticker: string): string {
@@ -119,13 +141,45 @@ async function callLlmGuarded(
 
 export async function handleChatMessage(message: string, deps: ChatDeps): Promise<ChatReply> {
   if (asksAboutPriceOrTechnicalData(message)) {
-    return { type: "text", message: NO_PRICE_DATA_REPLY };
+    return { type: "text", message: NO_CHART_REPLY };
   }
 
   const ticker = extractTicker(message);
   if (!ticker) {
     const msg = await callLlmGuarded(deps, buildChitchatSystemPrompt(), message, null);
     return { type: "text", message: msg };
+  }
+
+  // Indicator card path
+  if (asksAboutIndicators(message)) {
+    const ohlcvRows = await deps.db
+      .select()
+      .from(dailyTradeSummary)
+      .where(eq(dailyTradeSummary.stockCode, ticker))
+      .orderBy(asc(dailyTradeSummary.tradeDate));
+
+    if (ohlcvRows.length === 0) {
+      return { type: "text", message: noDataReply(ticker) };
+    }
+
+    const ind = computeIndicators(ohlcvRows);
+    const stockName = ohlcvRows[ohlcvRows.length - 1]?.stockName ?? null;
+    return {
+      type: "indicator_card",
+      ticker,
+      stockName,
+      tradeDate: ind.tradeDate,
+      rsi14: ind.rsi14,
+      macd: ind.macd,
+      macdSignal: ind.macdSignal,
+      macdHistogram: ind.macdHistogram,
+      ma20: ind.ma20,
+      ma50: ind.ma50,
+      bbUpper: ind.bbUpper,
+      bbMiddle: ind.bbMiddle,
+      bbLower: ind.bbLower,
+      atr14: ind.atr14,
+    };
   }
 
   const rows = await deps.db.select().from(financialRatios).where(eq(financialRatios.code, ticker));

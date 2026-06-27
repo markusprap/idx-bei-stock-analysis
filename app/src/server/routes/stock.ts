@@ -3,6 +3,7 @@ import { desc, asc, eq, and, gte } from "drizzle-orm";
 import type { db as DbClient } from "../db/client";
 import { dailyTradeSummary } from "../db/market-schema";
 import { financialRatios } from "../db/schema";
+import { computeIndicators } from "../lib/indicators";
 
 const STALENESS_THRESHOLD_HOURS = 24;
 
@@ -65,6 +66,26 @@ export function createStockRoute(deps: { db: typeof DbClient }) {
       })),
       staleness,
     });
+  });
+
+  app.get("/:code/indicators", async (c) => {
+    const code = c.req.param("code").toUpperCase();
+
+    const rows = await deps.db
+      .select()
+      .from(dailyTradeSummary)
+      .where(eq(dailyTradeSummary.stockCode, code))
+      .orderBy(asc(dailyTradeSummary.tradeDate));
+
+    if (rows.length === 0) {
+      return c.json({ code, indicators: null, staleness: null });
+    }
+
+    const indicators = computeIndicators(rows);
+    const latestRow = rows[rows.length - 1];
+    const staleness = latestRow ? computeStaleness(latestRow.scrapedAt) : null;
+
+    return c.json({ code, indicators, staleness });
   });
 
   app.get("/:code/fundamentals", async (c) => {

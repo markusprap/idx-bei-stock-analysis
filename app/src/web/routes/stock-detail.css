@@ -297,3 +297,120 @@
   width: 1.125rem;
   height: 1.125rem;
 }
+
+/* TechnicalIndicators */
+
+.tech-ind-section {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  margin-top: 1rem;
+}
+
+.tech-ind-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.tech-ind-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-text, #2b2620);
+  margin: 0;
+}
+
+.tech-ind-badges {
+  display: flex;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.tech-ind-badge-eod,
+.tech-ind-badge-date {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: var(--color-muted-bg, #f3f4f6);
+  color: var(--color-text-secondary, #6b7280);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+.tech-ind-badge-stale {
+  font-size: 0.625rem;
+  font-weight: 600;
+  background: #fef3c7;
+  color: #92400e;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+}
+
+.tech-ind-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1.5rem;
+  margin-bottom: 0.875rem;
+}
+
+@media (max-width: 520px) {
+  .tech-ind-groups { grid-template-columns: 1fr; }
+}
+
+.tech-ind-group {
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  padding-top: 0.625rem;
+}
+
+.tech-ind-group-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, #6b7280);
+  margin: 0 0 0.375rem;
+}
+
+.tech-ind-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.1875rem 0;
+  font-size: 0.8125rem;
+}
+
+.tech-ind-label {
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.tech-ind-value {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text, #2b2620);
+  text-align: right;
+}
+
+.tech-ind-note {
+  font-size: 0.6875rem;
+  font-weight: 400;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.tech-ind-state {
+  color: var(--color-text-secondary, #6b7280);
+  font-size: 0.875rem;
+}
+
+.tech-ind-disclaimer {
+  font-size: 0.75rem;
+  color: var(--color-text-secondary, #6b7280);
+  font-style: italic;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+  padding-top: 0.625rem;
+  margin: 0;
+  line-height: 1.5;
+}

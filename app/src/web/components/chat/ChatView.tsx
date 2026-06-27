@@ -3,10 +3,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { ChatBubbleIcon } from "../icons";
 import { FundamentalCard, type FundamentalCardData } from "./FundamentalCard";
+import { IndicatorCard, type IndicatorCardData } from "./IndicatorCard";
 import "./ChatView.css";
 
 type TextReply = { type: "text"; message: string };
-type ChatReply = TextReply | FundamentalCardData;
+type ChatReply = TextReply | FundamentalCardData | IndicatorCardData;
 
 function parseReply(content: string): ChatReply {
   try {
@@ -15,7 +16,7 @@ function parseReply(content: string): ChatReply {
       parsed !== null &&
       typeof parsed === "object" &&
       "type" in parsed &&
-      (parsed.type === "text" || parsed.type === "fundamental_card")
+      (parsed.type === "text" || parsed.type === "fundamental_card" || parsed.type === "indicator_card")
     ) {
       return parsed as ChatReply;
     }
@@ -133,6 +134,13 @@ export function ChatView({ threadId, ticker }: ChatViewProps) {
               return (
                 <div key={index} className="chat-view-message chat-view-message--assistant">
                   <FundamentalCard data={reply} />
+                </div>
+              );
+            }
+            if (reply.type === "indicator_card") {
+              return (
+                <div key={index} className="chat-view-message chat-view-message--assistant">
+                  <IndicatorCard data={reply} />
                 </div>
               );
             }

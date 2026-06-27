@@ -2,9 +2,11 @@ import { describe, expect, test, mock } from "bun:test";
 import {
   extractTicker,
   asksAboutPriceOrTechnicalData,
+  asksAboutIndicators,
   noDataReply,
   handleChatMessage,
   type FundamentalCardReply,
+  type IndicatorCardReply,
 } from "../src/server/routes/chat";
 import { db } from "../src/server/db/client";
 import { financialRatios, type FinancialRatioRow } from "../src/server/db/schema";
@@ -26,10 +28,13 @@ function dbReturning(rows: unknown[], tradeRows: unknown[] = []) {
   const responses = [rows, tradeRows];
 
   const makeChainable = (data: unknown[]) => {
-    const p = Promise.resolve(data);
-    (p as unknown as { orderBy: (x: unknown) => { limit: (n: number) => Promise<unknown[]> } }).orderBy =
-      () => ({ limit: async () => data });
-    return p;
+    // orderBy returns a thenable array (for the indicator path) that also has .limit (for the trade path)
+    const orderByResult = Object.assign(Promise.resolve(data), {
+      limit: async () => data,
+    });
+    return Object.assign(Promise.resolve(data), {
+      orderBy: () => orderByResult,
+    });
   };
 
   return {
@@ -63,8 +68,8 @@ describe("asksAboutPriceOrTechnicalData", () => {
     expect(asksAboutPriceOrTechnicalData("Tampilkan grafik BBCA 6 bulan")).toBe(true);
   });
 
-  test("detects a technical-indicator question", () => {
-    expect(asksAboutPriceOrTechnicalData("Gimana RSI BBCA?")).toBe(true);
+  test("detects the word chart", () => {
+    expect(asksAboutPriceOrTechnicalData("Show me the chart BBCA")).toBe(true);
   });
 
   test("does not flag an ordinary fundamental question", () => {
@@ -73,6 +78,36 @@ describe("asksAboutPriceOrTechnicalData", () => {
 
   test("does not flag a price/harga question — harga now answered via fundamental_card", () => {
     expect(asksAboutPriceOrTechnicalData("Harga BBCA hari ini berapa?")).toBe(false);
+  });
+
+  test("does not flag an RSI/indicator question — answered via indicator_card", () => {
+    expect(asksAboutPriceOrTechnicalData("Gimana RSI BBCA?")).toBe(false);
+  });
+});
+
+describe("asksAboutIndicators", () => {
+  test("detects RSI question", () => {
+    expect(asksAboutIndicators("Gimana RSI BBCA?")).toBe(true);
+  });
+
+  test("detects MACD question", () => {
+    expect(asksAboutIndicators("MACD TLKM gimana?")).toBe(true);
+  });
+
+  test("detects bollinger question", () => {
+    expect(asksAboutIndicators("bollinger bands BBCA")).toBe(true);
+  });
+
+  test("detects indikator teknikal question", () => {
+    expect(asksAboutIndicators("indikator BBCA gimana?")).toBe(true);
+  });
+
+  test("does not flag an ordinary fundamental question", () => {
+    expect(asksAboutIndicators("Gimana valuasi BBCA?")).toBe(false);
+  });
+
+  test("does not flag a harga question", () => {
+    expect(asksAboutIndicators("Harga BBCA berapa?")).toBe(false);
   });
 });
 
@@ -224,6 +259,65 @@ describe("handleChatMessage — harga query returns fundamental_card with trade 
     const card = reply as FundamentalCardReply;
     expect(card.close).toBeNull();
     expect(card.tradeDate).toBeNull();
+  });
+});
+
+describe("handleChatMessage — indicator_card path", () => {
+  function makeOhlcvRow(tradeDate: string, close: number, high: number, low: number) {
+    return { stockCode: "BBCA", stockName: "BCA", tradeDate, close, high, low, scrapedAt: new Date() };
+  }
+
+  function makeOhlcvRows(n: number): unknown[] {
+    const rows = [];
+    for (let i = 0; i < n; i++) {
+      const base = 9000 + i * 10;
+      rows.push(makeOhlcvRow(`2025-0${Math.floor(i / 28) + 1}-${String((i % 28) + 1).padStart(2, "0")}`, base, base + 50, base - 30));
+    }
+    return rows;
+  }
+
+  test("returns indicator_card for an RSI query with sufficient data", async () => {
+    const { llm, create } = fakeLlm("should never be called");
+    const ohlcvRows = makeOhlcvRows(60);
+
+    const reply = await handleChatMessage("Gimana RSI BBCA?", { db: dbReturning(ohlcvRows), llm });
+
+    expect(reply.type).toBe("indicator_card");
+    expect(create).not.toHaveBeenCalled();
+
+    const card = reply as IndicatorCardReply;
+    expect(card.ticker).toBe("BBCA");
+    expect(card.stockName).toBe("BCA");
+    expect(card.rsi14).not.toBeNull();
+  });
+
+  test("returns indicator_card for a MACD query", async () => {
+    const { llm } = fakeLlm("should never be called");
+    const reply = await handleChatMessage("MACD BBCA gimana?", { db: dbReturning(makeOhlcvRows(60)), llm });
+    expect(reply.type).toBe("indicator_card");
+    const card = reply as IndicatorCardReply;
+    expect(card.macd).not.toBeNull();
+    expect(card.macdSignal).not.toBeNull();
+    expect(card.macdHistogram).not.toBeNull();
+  });
+
+  test("returns no-data text reply when daily_trade_summary has no rows for the ticker", async () => {
+    const { llm, create } = fakeLlm("should never be called");
+
+    const reply = await handleChatMessage("RSI ZZZZ berapa?", { db: dbReturning([]), llm });
+
+    expect(reply.type).toBe("text");
+    if (reply.type === "text") expect(reply.message).toBe(noDataReply("ZZZZ"));
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  test("indicator_card has no verdict/recommendation field — Golden Rule AC 5", async () => {
+    const { llm } = fakeLlm("");
+    const reply = await handleChatMessage("indikator BBCA", { db: dbReturning(makeOhlcvRows(60)), llm });
+    const keys = Object.keys(reply);
+    expect(keys).not.toContain("verdict");
+    expect(keys).not.toContain("recommendation");
+    expect(keys).not.toContain("signal");
   });
 });
 

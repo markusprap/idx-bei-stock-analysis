@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Sidebar } from "../components/layout/Sidebar";
 import { PriceChart } from "../components/stock/PriceChart";
 import { FundamentalsTable } from "../components/stock/FundamentalsTable";
+import { TechnicalIndicators } from "../components/stock/TechnicalIndicators";
 import "./stock-detail.css";
 
 type ChartResponse = {
@@ -53,6 +54,7 @@ export function StockDetailRoute() {
         </div>
 
         <PriceChart code={code} />
+        <TechnicalIndicators code={code} />
         <FundamentalsTable code={code} />
 
         <div className="stock-detail-cta-wrap">
